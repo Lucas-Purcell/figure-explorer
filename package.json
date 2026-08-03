@@ -11,16 +11,87 @@
     "Other"
   ],
   "activationEvents": [
-      "onCommand:figure-explorer.helloWorld"
+    "onStartupFinished",
+    "onView:figureExplorer.figures",
+    "onCommand:figure-explorer.scanNotebook",
+    "onNotebook:jupyter-notebook"
   ],
   "main": "./dist/extension.js",
+  "extensionKind": ["workspace"],
   "contributes": {
     "commands": [
       {
-        "command": "figure-explorer.helloWorld",
-        "title": "Hello World"
+        "command": "figure-explorer.scanNotebook",
+        "title": "Figure Explorer: Scan Notebook"
+      },
+      {
+        "command": "figure-explorer.openFigure",
+        "title": "Figure Explorer: Open Figure"
+      },
+      {
+        "command": "figure-explorer.openNotebookGallery",
+        "title": "Figure Explorer: Open Notebook Gallery"
+      },
+      {
+        "command": "figure-explorer.openFigureGallery",
+        "title": "Figure Explorer: Open Figure in Gallery"
+      },
+      {
+        "command": "figure-explorer.revealFigureCell",
+        "title": "Figure Explorer: Reveal Cell"
+      },
+      {
+        "command": "figure-explorer.saveFigureAsPng",
+        "title": "Figure Explorer: Save PNG"
+      },
+      {
+        "command": "figure-explorer.exportFigureAsPdf",
+        "title": "Figure Explorer: Export PDF"
       }
-    ]
+    ],
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "figure-explorer.revealFigureCell",
+          "when": "view == figureExplorer.figures && viewItem == figureExplorer.figure",
+          "group": "navigation@1"
+        },
+        {
+          "command": "figure-explorer.saveFigureAsPng",
+          "when": "view == figureExplorer.figures && viewItem == figureExplorer.figure",
+          "group": "navigation@2"
+        },
+        {
+          "command": "figure-explorer.exportFigureAsPdf",
+          "when": "view == figureExplorer.figures && viewItem == figureExplorer.figure",
+          "group": "navigation@3"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "figureExplorer",
+          "title": "Figure Explorer",
+          "icon": "resources/Icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "figureExplorer": [
+        {
+          "id": "figureExplorer.figures",
+          "name": "Figures",
+          "icon": "resources/Icon.svg"
+        },
+        {
+          "id": "figureExplorer.gallery",
+          "name": "Gallery",
+          "type": "webview",
+          "icon": "resources/Icon.svg"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -37,19 +108,22 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.125.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
-    "typescript-eslint": "^8.61.1",
-    "eslint": "^10.5.0",
+    "@types/vscode": "^1.125.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
     "esbuild": "^0.28.1",
+    "eslint": "^10.5.0",
     "npm-run-all": "^4.1.5",
     "typescript": "^6.0.3",
-    "@vscode/test-cli": "^0.0.15",
-    "@vscode/test-electron": "^3.0.0"
+    "typescript-eslint": "^8.61.1"
   },
   "overrides": {
     "diff": "^8.0.4",
     "serialize-javascript": "^7.0.6"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
   }
 }

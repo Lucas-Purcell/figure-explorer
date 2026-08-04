@@ -6,11 +6,12 @@ export interface FigureRecord {
     notebookName: string;
     cellIndex: number;
     outputIndex: number;
+    itemIndex: number;
     mimeType: string;
-    data: string;
     title?: string;
     codeSnippet: string;
     cellSource: string;
+    searchText: string;
 }
 
 export interface NotebookFigures {

@@ -1,10 +1,21 @@
 import * as vscode from "vscode";
 import { PDFDocument } from "pdf-lib";
 import { FigureRecord } from "../notebook/types";
+import { imageStore } from "../registry/imageStore";
 
 export async function saveFigureAsPng(
     figure: FigureRecord
 ): Promise<void> {
+
+    const bytes = imageStore.get(figure.id);
+
+    if (!bytes) {
+        vscode.window.showErrorMessage(
+            "Image data is no longer available."
+        );
+        return;
+    }
+
     const target = await vscode.window.showSaveDialog({
         defaultUri: defaultUri(figure, "png"),
         filters: { "PNG image": ["png"] },
@@ -15,10 +26,7 @@ export async function saveFigureAsPng(
         return;
     }
 
-    await vscode.workspace.fs.writeFile(
-        target,
-        Buffer.from(figure.data, "base64")
-    );
+    await vscode.workspace.fs.writeFile(target, bytes);
 
     vscode.window.showInformationMessage("Figure saved as PNG.");
 }
@@ -26,6 +34,16 @@ export async function saveFigureAsPng(
 export async function exportFigureAsPdf(
     figure: FigureRecord
 ): Promise<void> {
+
+    const bytes = imageStore.get(figure.id);
+
+    if (!bytes) {
+        vscode.window.showErrorMessage(
+            "Image data is no longer available."
+        );
+        return;
+    }
+
     const target = await vscode.window.showSaveDialog({
         defaultUri: defaultUri(figure, "pdf"),
         filters: { "PDF document": ["pdf"] },
@@ -37,13 +55,15 @@ export async function exportFigureAsPdf(
     }
 
     const pdf = await PDFDocument.create();
-    const image = await pdf.embedPng(Buffer.from(figure.data, "base64"));
+
+    const image = await pdf.embedPng(Buffer.from(bytes));
 
     const margin = 36;
-    const pageWidth = 595.28;  // A4 width in points
-    const pageHeight = 841.89; // A4 height in points
+    const pageWidth = 595.28;
+    const pageHeight = 841.89;
+
     const scale = Math.min(
-        (pageWidth - margin * 2) / image.width,
+                (pageWidth - margin * 2) / image.width,
         (pageHeight - margin * 2) / image.height,
         1
     );

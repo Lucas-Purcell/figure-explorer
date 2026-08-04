@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { FigureRecord } from "../notebook/types";
+import { imageStore } from "../registry/imageStore";
 
 export function openFigurePreview(figure: FigureRecord): void {
     const panel = vscode.window.createWebviewPanel(
@@ -16,7 +17,11 @@ export function openFigurePreview(figure: FigureRecord): void {
 
 function previewHtml(figure: FigureRecord): string {
     const nonce = createNonce();
-    const imageSource = `data:${figure.mimeType};base64,${figure.data}`;
+    const base64 = imageStore.getBase64(figure.id);
+
+    const imageSource = base64
+        ? `data:${figure.mimeType};base64,${base64}`
+        : "";
     const title = escapeHtml(
         `${figure.notebookName} — Cell ${figure.cellIndex + 1}`
     );

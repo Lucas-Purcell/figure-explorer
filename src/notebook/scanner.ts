@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { FigureRecord } from "./types";
+import { imageStore } from "../registry/imageStore";
 
 const pngMimeType = "image/png";
 const figureTitlePattern = /^\s*#\s*figure\s*:\s*(.+?)\s*$/i;
@@ -11,22 +12,35 @@ export function scanNotebookDocument(
     const notebookName = fileName(notebook.uri);
 
     notebook.getCells().forEach((cell, cellIndex) => {
-        const metadata = figureMetadata(cell.document.getText());
+        const metadata = figureMetadata(
+            cell.document.getText(),
+            notebookName
+        );
 
         cell.outputs.forEach((output, outputIndex) => {
             output.items.forEach((item, itemIndex) => {
+
                 if (item.mime !== pngMimeType) {
                     return;
                 }
 
+                const id = imageId(
+                    notebook.uri,
+                    cellIndex,
+                    outputIndex,
+                    itemIndex
+                );
+
+                imageStore.put(id, item.data);
+
                 figures.push({
-                    id: figureId(cellIndex, outputIndex, itemIndex),
+                    id,
                     notebookUri: notebook.uri,
                     notebookName,
                     cellIndex,
                     outputIndex,
+                    itemIndex,
                     mimeType: item.mime,
-                    data: Buffer.from(item.data).toString("base64"),
                     ...metadata,
                 });
             });
@@ -46,9 +60,12 @@ export async function scanNotebookFile(uri: vscode.Uri): Promise<FigureRecord[]>
     };
     const figures: FigureRecord[] = [];
     const notebookName = fileName(uri);
-
+    
     notebook.cells?.forEach((cell, cellIndex) => {
-        const metadata = figureMetadata(sourceText(cell.source));
+        const metadata = figureMetadata(
+            sourceText(cell.source),
+            notebookName
+        );
 
         cell.outputs?.forEach((output, outputIndex) => {
             const image = output.data?.[pngMimeType];
@@ -56,14 +73,22 @@ export async function scanNotebookFile(uri: vscode.Uri): Promise<FigureRecord[]>
                 return;
             }
 
+            imageStore.put(
+                imageId(uri, cellIndex, outputIndex, 0),
+                Buffer.from(
+                    Array.isArray(image) ? image.join("") : image,
+                    "base64"
+                )
+            );
+
             figures.push({
-                id: figureId(cellIndex, outputIndex, 0),
+                id: imageId(uri, cellIndex, outputIndex, 0),
                 notebookUri: uri,
                 notebookName,
                 cellIndex,
                 outputIndex,
+                itemIndex: 0,
                 mimeType: pngMimeType,
-                data: Array.isArray(image) ? image.join("") : image,
                 ...metadata,
             });
         });
@@ -73,8 +98,15 @@ export async function scanNotebookFile(uri: vscode.Uri): Promise<FigureRecord[]>
 }
 
 function figureMetadata(
-    source: string
-): Pick<FigureRecord, "title" | "codeSnippet" | "cellSource"> {
+    source: string,
+    notebookName: string
+): Pick<
+    FigureRecord,
+    "title"
+    | "codeSnippet"
+    | "cellSource"
+    | "searchText"
+> {
     const lines = source.replace(/\r\n/g, "\n").split("\n");
     const firstNonEmptyIndex = lines.findIndex(
         (line: string) => line.trim().length > 0
@@ -89,10 +121,20 @@ function figureMetadata(
         .filter((line: string) => line.trim().length > 0)
         .slice(0, 4);
 
+    const codeSnippet = snippetLines.join("\n") || "No code available.";
+
     return {
         ...(title ? { title } : {}),
-        codeSnippet: snippetLines.join("\n") || "No code available.",
+        codeSnippet,
         cellSource: source,
+        searchText: [
+            notebookName,
+            title ?? "",
+            codeSnippet,
+            source,
+        ]
+        .join("\n")
+        .toLowerCase()
     };
 }
 
@@ -100,8 +142,13 @@ function sourceText(source: string | string[] | undefined): string {
     return Array.isArray(source) ? source.join("") : source ?? "";
 }
 
-function figureId(cellIndex: number, outputIndex: number, itemIndex: number): string {
-    return `figure-${cellIndex}-${outputIndex}-${itemIndex}`;
+function imageId(
+    notebookUri: vscode.Uri,
+    cellIndex: number,
+    outputIndex: number,
+    itemIndex: number
+): string {
+    return `${notebookUri.toString()}::${cellIndex}:${outputIndex}:${itemIndex}`;
 }
 
 function fileName(uri: vscode.Uri): string {

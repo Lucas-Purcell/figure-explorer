@@ -33,11 +33,16 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
 
-        figureRegistry.setNotebook(document.uri, scanNotebookDocument(document));
+        const figures = scanNotebookDocument(document);
+
+        figureRegistry.setNotebook(document.uri, figures);
+
         provider.refresh();
-        const currentNotebook = figureRegistry.getNotebook(document.uri);
-        if (currentNotebook) {
-            gallery.refreshIfShowing(currentNotebook);
+
+        const notebook = figureRegistry.getNotebook(document.uri);
+
+        if (notebook) {
+            gallery.refreshIfShowing(notebook);
         }
     };
 
@@ -101,24 +106,29 @@ export function activate(context: vscode.ExtensionContext): void {
                 void exportFigureAsPdf(item.figure);
             }
         ),
-        vscode.workspace.onDidOpenNotebookDocument(updateNotebook),
+        vscode.workspace.onDidOpenNotebookDocument((document) => {
+            updateNotebook(document);
+        }),
         vscode.workspace.onDidChangeNotebookDocument((event: vscode.NotebookDocumentChangeEvent) =>
             scheduleUpdate(event.notebook)
         ),
-        vscode.workspace.onDidCloseNotebookDocument((document: vscode.NotebookDocument) => {
+        vscode.workspace.onDidCloseNotebookDocument((document) => {
             if (!isJupyterNotebook(document)) {
                 return;
             }
 
             const key = document.uri.toString();
             const pending = pendingRefreshes.get(key);
+
             if (pending) {
                 clearTimeout(pending);
                 pendingRefreshes.delete(key);
             }
 
             figureRegistry.removeNotebook(document.uri);
+
             provider.refresh();
+            gallery.refreshRegistry();
         }),
         {
             dispose: () => {

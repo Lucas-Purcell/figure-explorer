@@ -1,14 +1,15 @@
 {
   "name": "figure-explorer",
-  "displayName": "figure-explorer",
+  "displayName": "Figure Explorer",
   "description": "Browse figures generated in Jupyter notebooks.",
-  "version": "0.0.1",
-  "publisher": "lucas",
+  "version": "0.1.0",
+  "publisher": "LPurcell",
   "engines": {
     "vscode": "^1.125.0"
   },
   "categories": [
-    "Other"
+    "Notebooks",
+    "Visualization"
   ],
   "activationEvents": [
     "onStartupFinished",
@@ -17,7 +18,9 @@
     "onNotebook:jupyter-notebook"
   ],
   "main": "./dist/extension.js",
-  "extensionKind": ["workspace"],
+  "extensionKind": [
+    "workspace"
+  ],
   "contributes": {
     "commands": [
       {
@@ -124,6 +127,7 @@
     "serialize-javascript": "^7.0.6"
   },
   "dependencies": {
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "sharp": "^0.35.3"
   }
 }

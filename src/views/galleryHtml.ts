@@ -48,7 +48,19 @@ h1 { margin: 0; overflow: hidden; font-size: 13px; text-overflow: ellipsis; whit
 .thumbnail img { display: block; width: 100%; aspect-ratio: 1.35; object-fit: contain; background: white; }
 .thumbnail span { display: block; overflow: hidden; margin-top: 3px; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .preview { padding: 12px; }
-.main-image { display: block; width: 100%; height: auto; background: white; }
+.main-image {
+    display: block;
+    width: 100%;
+    height: 300px;
+    object-fit: contain;
+    background: white;
+    opacity: 0;
+    transition: opacity 120ms ease-in-out;
+}
+
+.main-image.loaded {
+    opacity: 1;
+}
 .source { margin: 12px; border-top: 1px solid var(--vscode-panel-border); }
 .source h2 { margin: 10px 0 6px; font-size: 11px; }
 .source pre { overflow-x: auto; margin: 0; padding: 8px; background: var(--vscode-textCodeBlock-background); font-family: var(--vscode-editor-font-family); font-size: 11px; white-space: pre-wrap; }
@@ -163,6 +175,10 @@ window.addEventListener("message", (event) => {
         const img = document.querySelector("#preview-image");
 
         if (img) {
+            img.onload = () => {
+                img.classList.add("loaded");
+            };
+
             img.src =
                 "data:" +
                 message.mimeType +
@@ -232,6 +248,7 @@ function selectThumbnail(key) {
 }
 
 function updatePreview() {
+
     const selected = catalog.find(
         (figure) => figure.key === selectedKey
     );
@@ -248,14 +265,17 @@ function updatePreview() {
     const figureTitle =
         selected.title || ("Figure " + selected.number);
 
+
     preview.innerHTML =
         "<h2>" + escapeHtml(figureTitle) + "</h2>" +
-        '<img id="preview-image" class="main-image">';
+        '<img id="preview-image" class="main-image" alt="preview">';
+
 
     vscode.postMessage({
         type: "requestPreview",
         key: selected.key
     });
+
 
     source.innerHTML =
         "<h2>" +

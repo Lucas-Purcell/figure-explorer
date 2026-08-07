@@ -28,14 +28,20 @@ export function activate(context: vscode.ExtensionContext): void {
     const isJupyterNotebook = (document: vscode.NotebookDocument): boolean =>
         document.uri.path.toLowerCase().endsWith(".ipynb");
 
-    const updateNotebook = (document: vscode.NotebookDocument): void => {
+    const updateNotebook = async (
+        document: vscode.NotebookDocument
+    ): Promise<void> => {
+
         if (!isJupyterNotebook(document)) {
             return;
         }
 
-        const figures = scanNotebookDocument(document);
+        const figures = await scanNotebookDocument(document);
 
-        figureRegistry.setNotebook(document.uri, figures);
+        figureRegistry.setNotebook(
+            document.uri,
+            figures
+        );
 
         provider.refresh();
 
@@ -63,7 +69,9 @@ export function activate(context: vscode.ExtensionContext): void {
         }, refreshDelayMs));
     };
 
-    vscode.workspace.notebookDocuments.forEach(updateNotebook);
+    for (const notebook of vscode.workspace.notebookDocuments) {
+        void updateNotebook(notebook);
+    }
 
     context.subscriptions.push(
         treeView,
@@ -107,7 +115,7 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         ),
         vscode.workspace.onDidOpenNotebookDocument((document) => {
-            updateNotebook(document);
+            void updateNotebook(document);
         }),
         vscode.workspace.onDidChangeNotebookDocument((event: vscode.NotebookDocumentChangeEvent) =>
             scheduleUpdate(event.notebook)

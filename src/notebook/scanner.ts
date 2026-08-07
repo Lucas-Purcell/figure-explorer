@@ -1,27 +1,30 @@
 import * as vscode from "vscode";
+import sharp from "sharp";
 import { FigureRecord } from "./types";
 import { imageStore } from "../registry/imageStore";
 
 const pngMimeType = "image/png";
 const figureTitlePattern = /^\s*#\s*figure\s*:\s*(.+?)\s*$/i;
 
-export function scanNotebookDocument(
+export async function scanNotebookDocument(
     notebook: vscode.NotebookDocument
-): FigureRecord[] {
+): Promise<FigureRecord[]> {
     const figures: FigureRecord[] = [];
     const notebookName = fileName(notebook.uri);
 
-    notebook.getCells().forEach((cell, cellIndex) => {
+    for (const [cellIndex, cell] of notebook.getCells().entries()) {
+
         const metadata = figureMetadata(
             cell.document.getText(),
             notebookName
         );
 
-        cell.outputs.forEach((output, outputIndex) => {
-            output.items.forEach((item, itemIndex) => {
+        for (const [outputIndex, output] of cell.outputs.entries()) {
+
+            for (const [itemIndex, item] of output.items.entries()) {
 
                 if (item.mime !== pngMimeType) {
-                    return;
+                    continue;
                 }
 
                 const id = imageId(
@@ -31,7 +34,13 @@ export function scanNotebookDocument(
                     itemIndex
                 );
 
-                imageStore.put(id, item.data);
+                const thumbnail = await createThumbnail(item.data);
+
+                imageStore.put(
+                    id,
+                    item.data,
+                    thumbnail
+                );
 
                 figures.push({
                     id,
@@ -43,9 +52,9 @@ export function scanNotebookDocument(
                     mimeType: item.mime,
                     ...metadata,
                 });
-            });
-        });
-    });
+            }
+        }
+    }
 
     return figures;
 }
@@ -61,28 +70,43 @@ export async function scanNotebookFile(uri: vscode.Uri): Promise<FigureRecord[]>
     const figures: FigureRecord[] = [];
     const notebookName = fileName(uri);
     
-    notebook.cells?.forEach((cell, cellIndex) => {
+    for (const [cellIndex, cell] of (notebook.cells ?? []).entries()) {
+
         const metadata = figureMetadata(
             sourceText(cell.source),
             notebookName
         );
 
-        cell.outputs?.forEach((output, outputIndex) => {
+        for (const [outputIndex, output] of (cell.outputs ?? []).entries()) {
+
             const image = output.data?.[pngMimeType];
+
             if (!image) {
-                return;
+                continue;
             }
 
+            const id = imageId(
+                uri,
+                cellIndex,
+                outputIndex,
+                0
+            );
+
+            const bytes = Buffer.from(
+                Array.isArray(image) ? image.join("") : image,
+                "base64"
+            );
+
+            const thumbnail = await createThumbnail(bytes);
+
             imageStore.put(
-                imageId(uri, cellIndex, outputIndex, 0),
-                Buffer.from(
-                    Array.isArray(image) ? image.join("") : image,
-                    "base64"
-                )
+                id,
+                bytes,
+                thumbnail
             );
 
             figures.push({
-                id: imageId(uri, cellIndex, outputIndex, 0),
+                id,
                 notebookUri: uri,
                 notebookName,
                 cellIndex,
@@ -91,8 +115,8 @@ export async function scanNotebookFile(uri: vscode.Uri): Promise<FigureRecord[]>
                 mimeType: pngMimeType,
                 ...metadata,
             });
-        });
-    });
+        }
+    }
 
     return figures;
 }
@@ -153,4 +177,20 @@ function imageId(
 
 function fileName(uri: vscode.Uri): string {
     return uri.path.split("/").pop() ?? uri.toString();
+}
+
+async function createThumbnail(
+    bytes: Uint8Array
+): Promise<Uint8Array> {
+
+    return await sharp(bytes)
+        .resize({
+            width: 160,
+            height: 160,
+            fit: "inside",
+        })
+        .png({
+            quality: 80,
+        })
+        .toBuffer();
 }

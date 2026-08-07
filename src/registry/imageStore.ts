@@ -1,18 +1,30 @@
 import * as vscode from "vscode";
 
-export class ImageStore {
-    private readonly cache = new Map<string, Readonly<Uint8Array>>();
-    
-    put(id: string, bytes: Uint8Array): void {
-        this.cache.set(id, bytes);
-    }
+interface StoredImage {
+    full: Readonly<Uint8Array>;
+    thumbnail: Readonly<Uint8Array>;
+}
 
-    has(id: string): boolean {
-        return this.cache.has(id);
+export class ImageStore {
+    private readonly cache = new Map<string, StoredImage>();
+
+    put(
+        id: string,
+        full: Uint8Array,
+        thumbnail: Uint8Array
+    ): void {
+        this.cache.set(id, {
+            full,
+            thumbnail,
+        });
     }
 
     get(id: string): Readonly<Uint8Array> | undefined {
-        return this.cache.get(id);
+        return this.cache.get(id)?.full;
+    }
+
+    getThumbnail(id: string): Readonly<Uint8Array> | undefined {
+        return this.cache.get(id)?.thumbnail;
     }
 
     remove(id: string): void {
@@ -25,6 +37,7 @@ export class ImageStore {
 
     clearNotebook(notebookUri: vscode.Uri): void {
         const prefix = `${notebookUri.toString()}::`;
+
         for (const key of this.cache.keys()) {
             if (key.startsWith(prefix)) {
                 this.cache.delete(key);
@@ -33,13 +46,24 @@ export class ImageStore {
     }
 
     getBase64(id: string): string | undefined {
-        const bytes = this.cache.get(id);
+        const bytes = this.get(id);
+
         if (!bytes) {
             return undefined;
         }
+
         return Buffer.from(bytes).toString("base64");
     }
 
+    getThumbnailBase64(id: string): string | undefined {
+        const bytes = this.getThumbnail(id);
+
+        if (!bytes) {
+            return undefined;
+        }
+
+        return Buffer.from(bytes).toString("base64");
+    }
 }
 
 export const imageStore = new ImageStore();

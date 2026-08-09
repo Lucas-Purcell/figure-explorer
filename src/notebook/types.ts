@@ -12,6 +12,7 @@ export interface FigureRecord {
     codeSnippet: string;
     cellSource: string;
     searchText: string;
+    tags: string[];
 }
 
 export interface NotebookFigures {

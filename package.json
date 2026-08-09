@@ -2,8 +2,12 @@
   "name": "figure-explorer",
   "displayName": "Figure Explorer",
   "description": "Browse figures generated in Jupyter notebooks.",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "publisher": "LPurcell",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lucas-Purcell/figure-explorer"
+  },
   "engines": {
     "vscode": "^1.125.0"
   },

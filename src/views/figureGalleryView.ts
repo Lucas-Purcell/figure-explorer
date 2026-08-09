@@ -18,11 +18,13 @@ interface FigurePayload {
     notebookName: string;
     number: number;
     title?: string;
+    tags: string[];
     cellIndex: number;
     mimeType: string;
     codeSnippet: string;
     cellSource: string;
     searchText: string;
+
 }
 
 export class FigureGalleryViewProvider
@@ -267,6 +269,7 @@ export class FigureGalleryViewProvider
                 notebookName: notebook.name,
                 number,
                 title: figure.title,
+                tags: figure.tags,
                 cellIndex: figure.cellIndex,
                 mimeType: figure.mimeType,
                 codeSnippet: figure.codeSnippet,

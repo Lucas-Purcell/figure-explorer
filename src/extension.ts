@@ -13,7 +13,38 @@ import { FigureTreeItem } from "./views/figureTreeProvider";
 
 const refreshDelayMs = 150;
 
+const output = vscode.window.createOutputChannel("Figure Explorer");
+
+function log(message: string, ...values: unknown[]): void {
+    const suffix = values.length
+        ? " " + values.map(formatLogValue).join(" ")
+        : "";
+
+    output.appendLine(
+        `[${new Date().toISOString()}] ${message}${suffix}`
+    );
+}
+
+function formatLogValue(value: unknown): string {
+    if (typeof value === "string") {
+        return value;
+    }
+
+    try {
+        return JSON.stringify(value, null, 2);
+    } catch {
+        return String(value);
+    }
+}
 export function activate(context: vscode.ExtensionContext): void {
+
+    log("========================================");
+    log("FIGURE EXPLORER ACTIVATED");
+    log("Extension path:", context.extensionPath);
+    log("VS Code version:", vscode.version);
+    log("========================================");
+
+    output.show(true);
     const provider = new FigureTreeProvider();
     const gallery = new FigureGalleryViewProvider((figure: FigureRecord) => {
         void revealNotebookCell(figure);
@@ -48,7 +79,31 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
 
-        const figures = await scanNotebookDocument(document);
+        log(
+            "UPDATE NOTEBOOK",
+            document.uri.toString()
+        );
+
+        log("ABOUT TO SCAN");
+
+        let figures: FigureRecord[];
+
+        try {
+            figures = await scanNotebookDocument(document);
+        } catch (error) {
+            log("SCAN FAILED", error);
+            return;
+        }
+
+        log(
+            "SCANNED FIGURES",
+            figures.map((figure) => ({
+                cell: figure.cellIndex,
+                title: figure.title,
+                tags: figure.tags,
+                id: figure.id,
+            }))
+        );
 
         const isStillOpen = vscode.workspace.notebookDocuments.some(
             (notebook) => notebook.uri.toString() === document.uri.toString()
@@ -133,14 +188,34 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         ),
         vscode.workspace.onDidOpenNotebookDocument((document) => {
+            log(
+                "NOTEBOOK OPENED",
+                document.uri.toString()
+            );
+
             if (isJupyterNotebook(document)) {
+                log("OPENED NOTEBOOK IS JUPYTER");
                 void updateNotebook(document);
+            } else {
+                log("OPENED NOTEBOOK IS NOT JUPYTER");
             }
         }),
-        vscode.workspace.onDidChangeNotebookDocument((event: vscode.NotebookDocumentChangeEvent) =>
-            scheduleUpdate(event.notebook)
+        vscode.workspace.onDidChangeNotebookDocument(
+            (event: vscode.NotebookDocumentChangeEvent) => {
+                log(
+                    "NOTEBOOK CHANGED",
+                    event.notebook.uri.toString()
+                );
+
+                scheduleUpdate(event.notebook);
+            }
         ),
         vscode.workspace.onDidCloseNotebookDocument((document) => {
+            log(
+                "NOTEBOOK CLOSED",
+                document.uri.toString()
+            );
+
             if (!isJupyterNotebook(document)) {
                 return;
             }
@@ -157,11 +232,20 @@ export function activate(context: vscode.ExtensionContext): void {
 
             provider.refresh();
             gallery.refreshRegistry();
+
+            log("REMOVED NOTEBOOK FROM REGISTRY");
         }),
 
         vscode.window.tabGroups.onDidChangeTabs(() => {
+            log("TABS CHANGED");
+
             for (const notebook of figureRegistry.getNotebooks()) {
                 if (!isNotebookTabOpen(notebook.uri)) {
+                    log(
+                        "REMOVING NOTEBOOK BECAUSE TAB IS CLOSED",
+                        notebook.uri.toString()
+                    );
+
                     figureRegistry.removeNotebook(notebook.uri);
                 }
             }

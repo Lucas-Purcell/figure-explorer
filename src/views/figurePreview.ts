@@ -18,7 +18,17 @@ export function openFigurePreview(figure: FigureRecord): void {
 function previewHtml(figure: FigureRecord): string {
     const nonce = createNonce();
     const base64 = imageStore.getBase64(figure.id);
+    const tags = figure.tags ?? [];
 
+    const tagHtml = tags.length > 0
+        ? `
+            <div class="tags">
+                ${tags.map((tag) =>
+                    `<span class="tag">${escapeHtml(tag)}</span>`
+                ).join("")}
+            </div>
+        `
+        : "";
     const imageSource = base64
         ? `data:${figure.mimeType};base64,${base64}`
         : "";
@@ -28,6 +38,21 @@ function previewHtml(figure: FigureRecord): string {
 
     return `<!DOCTYPE html>
 <html lang="en">
+.tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 16px;
+}
+
+.tag {
+    padding: 3px 8px;
+    border: 1px solid var(--vscode-button-secondaryBackground);
+    border-radius: 10px;
+    color: var(--vscode-descriptionForeground);
+    background: var(--vscode-button-secondaryBackground);
+    font-size: 11px;
+}
 <head>
     <meta charset="UTF-8">
     <meta
@@ -62,6 +87,7 @@ function previewHtml(figure: FigureRecord): string {
 </head>
 <body>
     <h1>${title}</h1>
+    ${tagHtml}
     <img src="${imageSource}" alt="${title}">
 </body>
 </html>`;

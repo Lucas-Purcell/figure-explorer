@@ -4,10 +4,15 @@ import { imageStore } from "../registry/imageStore";
 
 const pngMimeType = "image/png";
 const figureTitlePattern = /^\s*#\s*figure\s*:\s*(.+?)\s*$/i;
+const figureTagsPattern = /^\s*#\s*tags\s*:\s*(.+?)\s*$/i;
 
 export async function scanNotebookDocument(
     notebook: vscode.NotebookDocument
 ): Promise<FigureRecord[]> {
+    console.log(
+        "FIGURE EXPLORER SCANNER RUNNING:",
+        notebook.uri.toString()
+    );
     const figures: FigureRecord[] = [];
     const notebookName = fileName(notebook.uri);
 
@@ -16,6 +21,11 @@ export async function scanNotebookDocument(
         const metadata = figureMetadata(
             cell.document.getText(),
             notebookName
+        );
+
+        console.log(
+            "FIGURE METADATA:",
+            metadata
         );
 
         for (const [outputIndex, output] of cell.outputs.entries()) {
@@ -32,7 +42,6 @@ export async function scanNotebookDocument(
                     outputIndex,
                     itemIndex
                 );
-
                 // const thumbnail = await createThumbnail(item.data);
 
                 imageStore.put(
@@ -124,6 +133,7 @@ function figureMetadata(
 ): Pick<
     FigureRecord,
     "title"
+    | "tags"
     | "codeSnippet"
     | "cellSource"
     | "searchText"
@@ -137,6 +147,28 @@ function figureMetadata(
 
     const title = firstLine.match(figureTitlePattern)?.[1].trim();
 
+    const tagsLine = lines.find((line: string) =>
+        figureTagsPattern.test(line)
+    );
+
+    const tags = tagsLine
+        ? tagsLine
+            .match(figureTagsPattern)?.[1]
+            .split(",")
+            .map((tag) => tag.trim().toLowerCase())
+            .filter(Boolean) ?? []
+        : [];
+
+    console.log(
+        "Figure metadata:",
+        {
+            notebook: notebookName,
+            title,
+            tags,
+            source,
+        }
+    );
+
     const snippetLines = lines
         .slice(title ? firstNonEmptyIndex + 1 : 0)
         .filter((line: string) => line.trim().length > 0)
@@ -146,11 +178,13 @@ function figureMetadata(
 
     return {
         ...(title ? { title } : {}),
+        tags,
         codeSnippet,
         cellSource: source,
         searchText: [
             notebookName,
             title ?? "",
+            tags.join(" "),
             codeSnippet,
             source,
         ]

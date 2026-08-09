@@ -5,10 +5,15 @@ class FigureRegistry {
     private readonly notebooks = new Map<string, NotebookFigures>();
 
     setNotebook(uri: vscode.Uri, figures: readonly FigureRecord[]): void {
-        this.notebooks.set(uri.toString(), {
+        const key = uri.toString();
+
+        this.notebooks.set(key, {
             uri,
             name: uri.path.split("/").pop() ?? uri.toString(),
-            figures: [...figures],
+            figures: figures.map((figure) => ({
+                ...figure,
+                tags: [...figure.tags],
+            })),
         });
     }
 

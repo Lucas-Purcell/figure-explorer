@@ -54,10 +54,7 @@ export class FigureGalleryViewProvider
             return;
         }
 
-        const base64 =
-            type === "thumbnail"
-                ? imageStore.getThumbnailBase64(match.figure.id)
-                : imageStore.getBase64(match.figure.id);
+        const base64 = imageStore.getBase64(match.figure.id);
 
         if (!base64) {
             return;

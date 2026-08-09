@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import sharp from "sharp";
 import { FigureRecord } from "./types";
 import { imageStore } from "../registry/imageStore";
 
@@ -34,12 +33,11 @@ export async function scanNotebookDocument(
                     itemIndex
                 );
 
-                const thumbnail = await createThumbnail(item.data);
+                // const thumbnail = await createThumbnail(item.data);
 
                 imageStore.put(
                     id,
-                    item.data,
-                    thumbnail
+                    item.data
                 );
 
                 figures.push({
@@ -97,12 +95,11 @@ export async function scanNotebookFile(uri: vscode.Uri): Promise<FigureRecord[]>
                 "base64"
             );
 
-            const thumbnail = await createThumbnail(bytes);
+            // const thumbnail = await createThumbnail(bytes);
 
             imageStore.put(
                 id,
                 bytes,
-                thumbnail
             );
 
             figures.push({
@@ -179,18 +176,18 @@ function fileName(uri: vscode.Uri): string {
     return uri.path.split("/").pop() ?? uri.toString();
 }
 
-async function createThumbnail(
-    bytes: Uint8Array
-): Promise<Uint8Array> {
+// async function createThumbnail(
+//     bytes: Uint8Array
+// ): Promise<Uint8Array> {
 
-    return await sharp(bytes)
-        .resize({
-            width: 160,
-            height: 160,
-            fit: "inside",
-        })
-        .png({
-            quality: 80,
-        })
-        .toBuffer();
-}
+//     return await sharp(bytes)
+//         .resize({
+//             width: 160,
+//             height: 160,
+//             fit: "inside",
+//         })
+//         .png({
+//             quality: 80,
+//         })
+//         .toBuffer();
+// }

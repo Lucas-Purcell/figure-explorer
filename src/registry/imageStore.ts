@@ -1,30 +1,14 @@
 import * as vscode from "vscode";
 
-interface StoredImage {
-    full: Readonly<Uint8Array>;
-    thumbnail: Readonly<Uint8Array>;
-}
-
 export class ImageStore {
-    private readonly cache = new Map<string, StoredImage>();
+    private readonly cache = new Map<string, Readonly<Uint8Array>>();
 
-    put(
-        id: string,
-        full: Uint8Array,
-        thumbnail: Uint8Array
-    ): void {
-        this.cache.set(id, {
-            full,
-            thumbnail,
-        });
+    put(id: string, bytes: Uint8Array): void {
+        this.cache.set(id, bytes);
     }
 
     get(id: string): Readonly<Uint8Array> | undefined {
-        return this.cache.get(id)?.full;
-    }
-
-    getThumbnail(id: string): Readonly<Uint8Array> | undefined {
-        return this.cache.get(id)?.thumbnail;
+        return this.cache.get(id);
     }
 
     remove(id: string): void {
@@ -47,16 +31,6 @@ export class ImageStore {
 
     getBase64(id: string): string | undefined {
         const bytes = this.get(id);
-
-        if (!bytes) {
-            return undefined;
-        }
-
-        return Buffer.from(bytes).toString("base64");
-    }
-
-    getThumbnailBase64(id: string): string | undefined {
-        const bytes = this.getThumbnail(id);
 
         if (!bytes) {
             return undefined;

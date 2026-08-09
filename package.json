@@ -2,7 +2,7 @@
   "name": "figure-explorer",
   "displayName": "Figure Explorer",
   "description": "Browse figures generated in Jupyter notebooks.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "LPurcell",
   "engines": {
     "vscode": "^1.125.0"

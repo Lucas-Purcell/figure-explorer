@@ -28,21 +28,37 @@ export function activate(context: vscode.ExtensionContext): void {
     const isJupyterNotebook = (document: vscode.NotebookDocument): boolean =>
         document.uri.path.toLowerCase().endsWith(".ipynb");
 
+    const isNotebookTabOpen = (uri: vscode.Uri): boolean => {
+        return vscode.window.tabGroups.all.some((group) =>
+            group.tabs.some((tab) => {
+                const input = tab.input;
+
+                return (
+                    input instanceof vscode.TabInputNotebook &&
+                    input.uri.toString() === uri.toString()
+                );
+            })
+        );
+    };
+
     const updateNotebook = async (
         document: vscode.NotebookDocument
     ): Promise<void> => {
-
         if (!isJupyterNotebook(document)) {
             return;
         }
 
         const figures = await scanNotebookDocument(document);
 
-        figureRegistry.setNotebook(
-            document.uri,
-            figures
+        const isStillOpen = vscode.workspace.notebookDocuments.some(
+            (notebook) => notebook.uri.toString() === document.uri.toString()
         );
 
+        if (!isStillOpen) {
+            return;
+        }
+
+        figureRegistry.setNotebook(document.uri, figures);
         provider.refresh();
 
         const notebook = figureRegistry.getNotebook(document.uri);
@@ -70,7 +86,9 @@ export function activate(context: vscode.ExtensionContext): void {
     };
 
     for (const notebook of vscode.workspace.notebookDocuments) {
-        void updateNotebook(notebook);
+        if (isJupyterNotebook(notebook)) {
+            void updateNotebook(notebook);
+        }
     }
 
     context.subscriptions.push(
@@ -115,7 +133,9 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         ),
         vscode.workspace.onDidOpenNotebookDocument((document) => {
-            void updateNotebook(document);
+            if (isJupyterNotebook(document)) {
+                void updateNotebook(document);
+            }
         }),
         vscode.workspace.onDidChangeNotebookDocument((event: vscode.NotebookDocumentChangeEvent) =>
             scheduleUpdate(event.notebook)
@@ -138,6 +158,18 @@ export function activate(context: vscode.ExtensionContext): void {
             provider.refresh();
             gallery.refreshRegistry();
         }),
+
+        vscode.window.tabGroups.onDidChangeTabs(() => {
+            for (const notebook of figureRegistry.getNotebooks()) {
+                if (!isNotebookTabOpen(notebook.uri)) {
+                    figureRegistry.removeNotebook(notebook.uri);
+                }
+            }
+
+            provider.refresh();
+            gallery.refreshRegistry();
+        }),
+        
         {
             dispose: () => {
                 pendingRefreshes.forEach((timer: ReturnType<typeof setTimeout>) =>

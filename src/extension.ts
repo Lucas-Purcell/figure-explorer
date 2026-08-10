@@ -3,7 +3,7 @@ import { scanNotebookCommand } from "./commands/scanNotebook";
 import { FigureRecord, NotebookFigures } from "./notebook/types";
 import { scanNotebookDocument } from "./notebook/scanner";
 import { figureRegistry } from "./registry/figureRegistry";
-import { FigureGalleryViewProvider } from "./views/figureGalleryView";
+import { FigureGalleryViewProvider } from "./views/gallery/figureGalleryView";
 import { FigureTreeProvider } from "./views/figureTreeProvider";
 import {
     exportFigureAsPdf,

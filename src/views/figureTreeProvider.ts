@@ -17,15 +17,36 @@ export class FigureTreeProvider implements vscode.TreeDataProvider<ExplorerItem>
     }
 
     getChildren(element?: ExplorerItem): vscode.ProviderResult<ExplorerItem[]> {
+        console.log(
+            "FIGURE TREE getChildren",
+            element ? element.constructor.name : "ROOT"
+        );
+
         if (!element) {
-            return figureRegistry.getNotebooks().map((notebook: NotebookFigures) =>
-                new NotebookTreeItem(notebook)
+            const notebooks = figureRegistry.getNotebooks();
+
+            console.log(
+                "FIGURE TREE ROOT",
+                notebooks.map((notebook) => ({
+                    name: notebook.name,
+                    figures: notebook.figures.length,
+                }))
+            );
+
+            return notebooks.map(
+                (notebook) => new NotebookTreeItem(notebook)
             );
         }
 
         if (element instanceof NotebookTreeItem) {
-            return element.notebook.figures.map((figure: FigureRecord, index: number) =>
-                new FigureTreeItem(figure, index + 1)
+            console.log(
+                "FIGURE TREE NOTEBOOK",
+                element.notebook.name,
+                element.notebook.figures.length
+            );
+
+            return element.notebook.figures.map(
+                (figure, index) => new FigureTreeItem(figure, index + 1)
             );
         }
 

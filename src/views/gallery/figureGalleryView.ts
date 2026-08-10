@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
-import { FigureRecord, NotebookFigures } from "../notebook/types";
-import { figureRegistry } from "../registry/figureRegistry";
-import { imageStore } from "../registry/imageStore";
+import { FigureRecord, NotebookFigures } from "../../notebook/types";
+import { figureRegistry } from "../../registry/figureRegistry";
+import { imageStore } from "../../registry/imageStore";
 import { galleryShellHtml } from "./galleryHtml";
 
 type SearchScope = "notebook" | "all";

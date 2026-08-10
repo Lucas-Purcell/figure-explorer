@@ -160,16 +160,24 @@ Other output types and image formats are not currently indexed by the figure sca
 
 ## Feedback
 
-Figure Explorer is designed with scientific and data-analysis workflows in mind. Feedback, bug reports, and suggestions are welcome.
+Figure Explorer is designed with scientific and data-analysis workflows in mind. Feedback, bug reports, and feature suggestions are welcome.
 
-If you encounter a problem, please include:
+The preferred way to report issues or suggest features is through the project's GitHub repository:
 
-- VS Code version
+**GitHub:** [[figure-explorer/issues](https://github.com/Lucas-Purcell/figure-explorer/issues)]
+
+When reporting a problem, please include:
+
 - Figure Explorer version
+- VS Code version
 - Operating system
 - A description of the notebook or output that caused the problem
+- Steps to reproduce the problem
 - Any relevant error message from VS Code
+- Screenshots, if applicable
+
+Feature requests and workflow suggestions are also welcome.
 
 ## License
 
-License information will be added in a future release.
+Figure Explorer is released under the [MIT License](LICENSE).

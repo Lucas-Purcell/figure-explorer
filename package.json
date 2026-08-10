@@ -4,6 +4,7 @@
   "description": "Browse figures generated in Jupyter notebooks.",
   "version": "0.1.5",
   "publisher": "LPurcell",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/Lucas-Purcell/figure-explorer"

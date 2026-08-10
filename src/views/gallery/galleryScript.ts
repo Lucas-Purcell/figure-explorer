@@ -66,6 +66,11 @@ let scope: "notebook" | "all" = "notebook";
 let titleFilter: "all" | "titled" | "untitled" = "all";
 let activeTags: string[] = [];
 
+let comparisonKeys: string[] = [];
+let comparisonMode = false;
+
+const previewImages = new Map<string, string>();
+
 /* ─────────────────────────────────────────────
    DOM elements
    ───────────────────────────────────────────── */
@@ -109,6 +114,9 @@ const filtersButton =
 const filterPanel =
     getElement<HTMLElement>("#filter-panel");
 
+const compare =
+    getElement<HTMLButtonElement>("#compare");
+
 if (
     !thumbnails ||
     !search ||
@@ -121,6 +129,7 @@ if (
     !preview ||
     !source ||
     !reveal ||
+    !compare ||
     !filtersButton ||
     !filterPanel
 ) {
@@ -200,6 +209,23 @@ window.addEventListener(
         }
 
         if (message.type === "preview") {
+            previewImages.set(
+                message.key,
+                "data:" +
+                message.mimeType +
+                ";base64," +
+                message.data
+            );
+
+            if (comparisonMode) {
+                renderComparison();
+                return;
+            }
+
+            if (message.key !== selectedKey) {
+                return;
+            }
+
             const img =
                 document.querySelector<HTMLImageElement>(
                     "#preview-image"
@@ -466,6 +492,18 @@ reveal.addEventListener("click", () => {
     });
 });
 
+/* ─────────────────────────────────────────────
+   Comparison mode
+   ───────────────────────────────────────────── */
+
+compare.addEventListener("click", () => {
+    if (comparisonMode) {
+        exitComparisonMode();
+        return;
+    }
+
+    enterComparisonMode();
+});
 
 /* ─────────────────────────────────────────────
    Thumbnail selection
@@ -474,21 +512,259 @@ reveal.addEventListener("click", () => {
 function selectThumbnail(key: string): void {
     selectedKey = key;
 
-    document
-        .querySelectorAll<HTMLButtonElement>(".thumbnail")
-        .forEach((button) => {
-            button.classList.toggle(
-                "selected",
-                button.dataset.key === key
-            );
-        });
+    renderThumbnailSelection();
 
     vscode.postMessage({
         type: "selectFigure",
         key,
     });
 
+    if (!comparisonMode) {
+        updatePreview();
+    }
+}
+
+function toggleComparisonFigure(key: string): void {
+    const index = comparisonKeys.indexOf(key);
+
+    if (index >= 0) {
+        comparisonKeys.splice(index, 1);
+    } else {
+        comparisonKeys.push(key);
+    }
+
+    updateComparisonUI();
+    renderThumbnailSelection();
+
+    if (comparisonMode) {
+        if (comparisonKeys.length < 2) {
+            exitComparisonMode();
+        } else {
+            requestComparisonImages();
+            renderComparison();
+        }
+    }
+}
+
+function renderThumbnailSelection(): void {
+    document
+        .querySelectorAll<HTMLButtonElement>(".thumbnail")
+        .forEach((button) => {
+            const key = button.dataset.key;
+
+            const isSelected =
+                key === selectedKey;
+
+            const comparisonIndex =
+                key
+                    ? comparisonKeys.indexOf(key)
+                    : -1;
+
+            const isComparisonSelected =
+                comparisonIndex >= 0;
+
+            button.classList.toggle(
+                "selected",
+                isSelected
+            );
+
+            button.classList.toggle(
+                "comparison-selected",
+                isComparisonSelected
+            );
+
+            const existingMarker =
+                button.querySelector<HTMLElement>(
+                    ".comparison-marker"
+                );
+
+            if (isComparisonSelected) {
+                if (existingMarker) {
+                    existingMarker.textContent =
+                        String(comparisonIndex + 1);
+                } else {
+                    const marker =
+                        document.createElement("span");
+
+                    marker.className =
+                        "comparison-marker";
+
+                    marker.textContent =
+                        String(comparisonIndex + 1);
+
+                    button.prepend(marker);
+                }
+            } else {
+                existingMarker?.remove();
+            }
+        });
+}
+
+function updateComparisonUI(): void {
+    compare.disabled = comparisonKeys.length < 2;
+
+    compare.textContent =
+        comparisonKeys.length > 0
+            ? "Compare (" + comparisonKeys.length + ")"
+            : "Compare";
+
+    compare.classList.toggle(
+        "active",
+        comparisonMode
+    );
+}
+
+function requestComparisonImages(): void {
+    comparisonKeys.forEach((key) => {
+        if (!previewImages.has(key)) {
+            vscode.postMessage({
+                type: "requestPreview",
+                key,
+            });
+        }
+    });
+}
+
+function enterComparisonMode(): void {
+    if (comparisonKeys.length < 2) {
+        return;
+    }
+
+    comparisonMode = true;
+
+    thumbnails.style.display = "none";
+    source.style.display = "none";
+
+    requestComparisonImages();
+    renderComparison();
+    updateComparisonUI();
+}
+
+function exitComparisonMode(): void {
+    comparisonMode = false;
+    comparisonKeys = [];
+
+    thumbnails.style.display = "";
+    source.style.display = "";
+
+    updateComparisonUI();
+    renderThumbnailSelection();
     updatePreview();
+}
+
+function renderComparison(): void {
+    if (!comparisonMode) {
+        return;
+    }
+
+    const figures = comparisonKeys
+        .map((key) =>
+            catalog.find(
+                (figure) => figure.key === key
+            )
+        )
+        .filter(
+            (figure): figure is GalleryFigure =>
+                figure !== undefined
+        );
+
+    if (figures.length < 2) {
+        exitComparisonMode();
+        return;
+    }
+
+    source.innerHTML = "";
+
+    preview.innerHTML =
+        '<div class="comparison-header">' +
+            "<div>" +
+                "<h2>Figure Comparison</h2>" +
+                '<span class="comparison-count">' +
+                    figures.length +
+                    " figures" +
+                "</span>" +
+            "</div>" +
+            '<button id="exit-comparison" type="button">' +
+                "Exit comparison" +
+            "</button>" +
+        "</div>" +
+
+        '<div class="comparison-grid">' +
+            figures
+                .map((figure) => {
+                    const figureTitle =
+                        figure.title ||
+                        "Figure " +
+                        figure.number;
+
+                    const image =
+                        previewImages.get(
+                            figure.key
+                        );
+
+                    const imageHtml = image
+                        ? '<img class="comparison-image loaded" ' +
+                          'src="' +
+                          escapeHtml(image) +
+                          '" ' +
+                          'alt="' +
+                          escapeHtml(
+                              figureTitle
+                          ) +
+                          '">'
+                        : '<div class="comparison-image-loading">' +
+                          "Loading…" +
+                          "</div>";
+
+                    const tags =
+                        figure.tags || [];
+
+                    const tagsHtml =
+                        tags.length > 0
+                            ? '<div class="tags">' +
+                              tags
+                                  .map(
+                                      (tag) =>
+                                          '<span class="tag">' +
+                                          escapeHtml(
+                                              tag
+                                          ) +
+                                          "</span>"
+                                  )
+                                  .join("") +
+                              "</div>"
+                            : "";
+
+                    return (
+                        '<article class="comparison-card">' +
+
+                            imageHtml +
+
+                            '<div class="comparison-card-content">' +
+
+                                '<h3>' +
+                                    escapeHtml(figureTitle) +
+                                "</h3>" +
+
+                                tagsHtml +
+
+                            "</div>" +
+
+                        "</article>"
+                    );
+                })
+                .join("") +
+        "</div>";
+
+    const exitButton =
+        document.querySelector<HTMLButtonElement>(
+            "#exit-comparison"
+        );
+
+    exitButton?.addEventListener(
+        "click",
+        exitComparisonMode
+    );
 }
 
 function selectAdjacentFigure(
@@ -629,6 +905,16 @@ document.addEventListener("keydown", (event) => {
             event.preventDefault();
             selectAdjacentFigure("down");
             break;
+        
+        case "Escape":
+            if (comparisonMode) {
+                exitComparisonMode();
+            } else if (comparisonKeys.length > 0) {
+                comparisonKeys = [];
+                updateComparisonUI();
+                renderThumbnailSelection();
+            }
+            break;
     }
 });
 
@@ -637,10 +923,13 @@ document.addEventListener("keydown", (event) => {
    ───────────────────────────────────────────── */
 
 function updatePreview(): void {
+    if (comparisonMode) {
+        renderComparison();
+        return;
+    }
     const selected = catalog.find(
         (figure) => figure.key === selectedKey
     );
-
     if (!selected) {
         preview.innerHTML =
             '<p class="empty">' +
@@ -719,6 +1008,11 @@ function updatePreview(): void {
    ───────────────────────────────────────────── */
 
 function render(): void {
+    if (comparisonMode) {
+        updateComparisonUI();
+        renderComparison();
+        return;
+    }
     const results = filteredCatalog();
 
     if (
@@ -790,18 +1084,35 @@ function render(): void {
                 (figure.key === selectedKey
                     ? " selected"
                     : "") +
+                (comparisonKeys.includes(figure.key)
+                    ? " comparison-selected"
+                    : "") +
                 '" data-key="' +
                 escapeHtml(figure.key) +
                 '">' +
+                (
+                    comparisonKeys.includes(figure.key)
+                        ? '<span class="comparison-marker">' +
+                            String(
+                                comparisonKeys.indexOf(
+                                    figure.key
+                                ) + 1
+                            ) +
+                        "</span>"
+                        : "" 
+                ) +
+
                 '<img class="lazy" ' +
                 'data-key="' +
                 escapeHtml(figure.key) +
                 '" ' +
                 'src="" ' +
                 'alt="thumbnail">' +
+
                 "<span>" +
                 escapeHtml(label) +
                 "</span>" +
+
                 "</button>"
             );
         })
@@ -810,12 +1121,25 @@ function render(): void {
     thumbnails
         .querySelectorAll<HTMLButtonElement>(".thumbnail")
         .forEach((button) => {
-            button.addEventListener("click", () => {
+            button.addEventListener("click", (event) => {
                 const key = button.dataset.key;
 
-                if (key) {
-                    selectThumbnail(key);
+                if (!key) {
+                    return;
                 }
+
+                const mouseEvent = event as MouseEvent;
+
+                const comparisonModifier =
+                    mouseEvent.ctrlKey ||
+                    mouseEvent.metaKey;
+
+                if (comparisonModifier) {
+                    toggleComparisonFigure(key);
+                    return;
+                }
+
+                selectThumbnail(key);
             });
 
             button.addEventListener("dblclick", () => {

@@ -174,9 +174,20 @@ export function galleryShellHtml(): string {
 
         <span id="count">0 figures</span>
 
-        <button id="reveal" disabled>
-            Reveal Cell
-        </button>
+        <div class="result-actions">
+
+            <button
+                id="compare"
+                disabled
+            >
+                Compare
+            </button>
+
+            <button id="reveal" disabled>
+                Reveal Cell
+            </button>
+
+        </div>
 
     </div>
 

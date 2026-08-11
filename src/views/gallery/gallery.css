@@ -513,7 +513,7 @@ h1 {
     display: block;
     width: 100%;
     max-width: 100%;
-    height: 300px;
+    height: auto;
     margin-top: 10px;
     object-fit: contain;
     background: white;
@@ -610,17 +610,8 @@ h1 {
         margin-right: 8px;
     }
 
-    .main-image {
-        height: 240px;
-    }
-
     .comparison-grid {
         grid-template-columns: 1fr;
-    }
-
-    .comparison-image,
-    .comparison-image-loading {
-        height: 220px;
     }
 }
 
@@ -778,7 +769,7 @@ h1 {
 .comparison-image {
     display: block;
     width: 100%;
-    height: 180px;
+    max-height: 100%;
     object-fit: contain;
     background: white;
 }
@@ -788,7 +779,7 @@ h1 {
     align-items: center;
     justify-content: center;
     width: 100%;
-    height: 180px;
+    min-height: 100px;
     color: var(--vscode-descriptionForeground);
     background: white;
     font-size: 11px;

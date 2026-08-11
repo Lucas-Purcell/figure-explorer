@@ -11,6 +11,7 @@ interface GalleryFigure {
     codeSnippet: string;
     cellSource: string;
     searchText: string;
+    version: string;
 }
 
 interface GalleryCatalogMessage {
@@ -34,6 +35,7 @@ interface GalleryPreviewMessage {
     key: string;
     mimeType: string;
     data: string;
+    version: string;
 }
 
 type GalleryWebviewMessage =
@@ -69,7 +71,11 @@ let activeTags: string[] = [];
 let comparisonKeys: string[] = [];
 let comparisonMode = false;
 
-const previewImages = new Map<string, string>();
+const previewImages =
+    new Map<string, string>();
+
+const previewVersions =
+    new Map<string, string>();
 
 /* ─────────────────────────────────────────────
    DOM elements
@@ -217,6 +223,11 @@ window.addEventListener(
                 message.data
             );
 
+            previewVersions.set(
+                message.key,
+                message.version
+            );
+
             if (comparisonMode) {
                 renderComparison();
                 return;
@@ -234,6 +245,8 @@ window.addEventListener(
             if (!img) {
                 return;
             }
+
+            img.classList.remove("loaded");
 
             img.onload = () => {
                 img.classList.add("loaded");
@@ -927,9 +940,11 @@ function updatePreview(): void {
         renderComparison();
         return;
     }
+
     const selected = catalog.find(
         (figure) => figure.key === selectedKey
     );
+
     if (!selected) {
         preview.innerHTML =
             '<p class="empty">' +
@@ -947,6 +962,33 @@ function updatePreview(): void {
         "Figure " + selected.number;
 
     const tags = selected.tags || [];
+
+    const existingImage =
+        preview.querySelector<HTMLImageElement>(
+            "#preview-image"
+        );
+
+    const existingFigureKey =
+        preview.dataset.figureKey;
+
+    /*
+     * If the same figure is still selected,
+     * don't rebuild the preview DOM.
+     *
+     * This is what prevents the preview from
+     * flickering whenever the notebook changes.
+     */
+    if (
+        existingFigureKey === selected.key &&
+        existingImage
+    ) {
+        updatePreviewMetadata(selected);
+        reveal.disabled = false;
+
+        return;
+    }
+
+    preview.dataset.figureKey = selected.key;
 
     const tagHtml =
         tags.length > 0
@@ -990,6 +1032,75 @@ function updatePreview(): void {
         key: selected.key,
     });
 
+    updatePreviewMetadata(selected);
+
+    reveal.disabled = false;
+}
+
+
+function updatePreviewMetadata(
+    selected: GalleryFigure
+): void {
+    const figureTitle =
+        selected.title ||
+        "Figure " + selected.number;
+
+    const heading =
+        preview.querySelector<HTMLHeadingElement>("h2");
+
+    if (heading) {
+        heading.textContent = figureTitle;
+    }
+
+    const tags = selected.tags || [];
+
+    let tagsContainer =
+        preview.querySelector<HTMLElement>(".tags");
+
+    if (tags.length === 0) {
+        tagsContainer?.remove();
+    } else {
+        if (!tagsContainer) {
+            tagsContainer =
+                document.createElement("div");
+
+            tagsContainer.className = "tags";
+
+            const image =
+                preview.querySelector<HTMLImageElement>(
+                    "#preview-image"
+                );
+
+            if (image) {
+                image.before(tagsContainer);
+            }
+        }
+
+        tagsContainer.innerHTML = tags
+            .map(
+                (tag) =>
+                    '<span class="tag" data-tag="' +
+                    escapeHtml(tag) +
+                    '">' +
+                    escapeHtml(tag) +
+                    "</span>"
+            )
+            .join("");
+
+        tagsContainer
+            .querySelectorAll<HTMLElement>(".tag")
+            .forEach((tagElement) => {
+                tagElement.addEventListener("click", () => {
+                    const tag =
+                        tagElement.dataset.tag;
+
+                    if (tag) {
+                        addTagFilter(tag);
+                    }
+                });
+            });
+    }
+
     source.innerHTML =
         "<h2>" +
         escapeHtml(selected.notebookName) +
@@ -999,8 +1110,6 @@ function updatePreview(): void {
         "<pre>" +
         escapeHtml(selected.codeSnippet) +
         "</pre>";
-
-    reveal.disabled = false;
 }
 
 /* ─────────────────────────────────────────────
@@ -1066,69 +1175,75 @@ function render(): void {
         catalog.length +
         " figures";
 
-    thumbnails.innerHTML = results
-        .map((figure) => {
-            const figureTitle =
-                figure.title ||
-                "Figure " + figure.number;
+    updateThumbnailElements(results);
 
-            const label =
-                scope === "all"
-                    ? figureTitle +
-                      " · " +
-                      figure.notebookName
-                    : figureTitle;
 
-            return (
-                '<button class="thumbnail' +
-                (figure.key === selectedKey
-                    ? " selected"
-                    : "") +
-                (comparisonKeys.includes(figure.key)
-                    ? " comparison-selected"
-                    : "") +
-                '" data-key="' +
-                escapeHtml(figure.key) +
-                '">' +
-                (
-                    comparisonKeys.includes(figure.key)
-                        ? '<span class="comparison-marker">' +
-                            String(
-                                comparisonKeys.indexOf(
-                                    figure.key
-                                ) + 1
-                            ) +
-                        "</span>"
-                        : "" 
-                ) +
+    updateSearchUI();
+    updatePreview();
+}
 
-                '<img class="lazy" ' +
-                'data-key="' +
-                escapeHtml(figure.key) +
-                '" ' +
-                'src="" ' +
-                'alt="thumbnail">' +
-
-                "<span>" +
-                escapeHtml(label) +
-                "</span>" +
-
-                "</button>"
-            );
-        })
-        .join("");
+function updateThumbnailElements(
+    results: GalleryFigure[]
+): void {
+    const existingButtons =
+        new Map<string, HTMLButtonElement>();
 
     thumbnails
         .querySelectorAll<HTMLButtonElement>(".thumbnail")
         .forEach((button) => {
+            const key = button.dataset.key;
+
+            if (key) {
+                existingButtons.set(key, button);
+            }
+        });
+
+    const fragment = document.createDocumentFragment();
+
+    results.forEach((figure) => {
+        const figureTitle =
+            figure.title ||
+            "Figure " + figure.number;
+
+        const label =
+            scope === "all"
+                ? figureTitle +
+                  " · " +
+                  figure.notebookName
+                : figureTitle;
+
+        let button =
+            existingButtons.get(figure.key);
+
+        if (!button) {
+            button =
+                document.createElement("button");
+
+            button.className = "thumbnail";
+            button.dataset.key = figure.key;
+
+            const img =
+                document.createElement("img");
+
+            img.className = "lazy";
+            img.dataset.key = figure.key;
+            img.alt = "thumbnail";
+
+            const labelElement =
+                document.createElement("span");
+
+            button.appendChild(img);
+            button.appendChild(labelElement);
+
             button.addEventListener("click", (event) => {
-                const key = button.dataset.key;
+                const key = button?.dataset.key;
 
                 if (!key) {
                     return;
                 }
 
-                const mouseEvent = event as MouseEvent;
+                const mouseEvent =
+                    event as MouseEvent;
 
                 const comparisonModifier =
                     mouseEvent.ctrlKey ||
@@ -1143,7 +1258,7 @@ function render(): void {
             });
 
             button.addEventListener("dblclick", () => {
-                const key = button.dataset.key;
+                const key = button?.dataset.key;
 
                 if (!key) {
                     return;
@@ -1155,18 +1270,104 @@ function render(): void {
                     type: "revealCell",
                 });
             });
-        });
+        }
 
-    thumbnails
-        .querySelectorAll<HTMLImageElement>(
-            ".thumbnail img"
-        )
-        .forEach((img) => {
+        const img =
+            button.querySelector<HTMLImageElement>(
+                "img"
+            );
+
+        const labelElement =
+            button.querySelector<HTMLSpanElement>(
+                "span:not(.comparison-marker)"
+            );
+
+        if (!img || !labelElement) {
+            return;
+        }
+
+        labelElement.textContent = label;
+
+        /*
+         * Preserve the existing image if this figure
+         * has not changed.
+         */
+        if (
+            img.dataset.figureVersion !==
+            figureVersion(figure)
+        ) {
+            img.dataset.figureVersion =
+                figureVersion(figure);
+
+            img.src = "";
+            img.dataset.loaded = "0";
+            img.classList.remove("loaded");
+
             thumbnailObserver.observe(img);
-        });
+        }
 
-    updateSearchUI();
-    updatePreview();
+        button.classList.toggle(
+            "selected",
+            figure.key === selectedKey
+        );
+
+        button.classList.toggle(
+            "comparison-selected",
+            comparisonKeys.includes(figure.key)
+        );
+
+        const existingMarker =
+            button.querySelector<HTMLElement>(
+                ".comparison-marker"
+            );
+
+        const comparisonIndex =
+            comparisonKeys.indexOf(
+                figure.key
+            );
+
+        if (comparisonIndex >= 0) {
+            if (existingMarker) {
+                existingMarker.textContent =
+                    String(comparisonIndex + 1);
+            } else {
+                const marker =
+                    document.createElement("span");
+
+                marker.className =
+                    "comparison-marker";
+
+                marker.textContent =
+                    String(comparisonIndex + 1);
+
+                button.prepend(marker);
+            }
+        } else {
+            existingMarker?.remove();
+        }
+
+        fragment.appendChild(button);
+
+        existingButtons.delete(
+            figure.key
+        );
+    });
+
+    /*
+     * Anything left in existingButtons no longer
+     * exists in the catalog.
+     */
+    existingButtons.forEach((button) => {
+        button.remove();
+    });
+
+    thumbnails.appendChild(fragment);
+}
+
+function figureVersion(
+    figure: GalleryFigure
+): string {
+    return figure.version;
 }
 
 /* ─────────────────────────────────────────────

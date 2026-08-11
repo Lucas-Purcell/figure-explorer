@@ -8,6 +8,7 @@ export interface FigureRecord {
     outputIndex: number;
     itemIndex: number;
     mimeType: string;
+    version: string;
     title?: string;
     codeSnippet: string;
     cellSource: string;

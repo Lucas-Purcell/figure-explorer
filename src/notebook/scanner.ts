@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { FigureRecord } from "./types";
 import { imageStore } from "../registry/imageStore";
+import { createHash } from "node:crypto";
 
 const pngMimeType = "image/png";
 const figureTitlePattern = /^\s*#\s*figure\s*:\s*(.+?)\s*$/i;
@@ -57,6 +58,7 @@ export async function scanNotebookDocument(
                     outputIndex,
                     itemIndex,
                     mimeType: item.mime,
+                    version: imageVersion(item.data),
                     ...metadata,
                 });
             }
@@ -119,6 +121,7 @@ export async function scanNotebookFile(uri: vscode.Uri): Promise<FigureRecord[]>
                 outputIndex,
                 itemIndex: 0,
                 mimeType: pngMimeType,
+                version: imageVersion(bytes),
                 ...metadata,
             });
         }
@@ -210,18 +213,8 @@ function fileName(uri: vscode.Uri): string {
     return uri.path.split("/").pop() ?? uri.toString();
 }
 
-// async function createThumbnail(
-//     bytes: Uint8Array
-// ): Promise<Uint8Array> {
-
-//     return await sharp(bytes)
-//         .resize({
-//             width: 160,
-//             height: 160,
-//             fit: "inside",
-//         })
-//         .png({
-//             quality: 80,
-//         })
-//         .toBuffer();
-// }
+function imageVersion(bytes: Uint8Array): string {
+    return createHash("sha1")
+        .update(bytes)
+        .digest("hex");
+}

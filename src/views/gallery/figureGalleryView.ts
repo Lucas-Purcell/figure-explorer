@@ -24,7 +24,7 @@ interface FigurePayload {
     codeSnippet: string;
     cellSource: string;
     searchText: string;
-
+    version: string;
 }
 
 export class FigureGalleryViewProvider
@@ -67,6 +67,7 @@ export class FigureGalleryViewProvider
             key,
             mimeType: match.figure.mimeType,
             data: base64,
+            version: figureVersion(match.figure),
         });
     }
 
@@ -275,6 +276,7 @@ export class FigureGalleryViewProvider
                 codeSnippet: figure.codeSnippet,
                 cellSource: figure.cellSource,
                 searchText: figure.searchText,
+                version: figureVersion(figure),
             })
         );
 
@@ -291,4 +293,10 @@ export class FigureGalleryViewProvider
 
 function figureKey(notebook: NotebookFigures, figureId: string): string {
     return `${notebook.uri.toString()}::${figureId}`;
+}
+
+function figureVersion(
+    figure: FigureRecord
+): string {
+    return figure.version;
 }

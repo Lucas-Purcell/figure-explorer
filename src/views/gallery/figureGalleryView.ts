@@ -30,6 +30,7 @@ interface FigurePayload {
 export class FigureGalleryViewProvider
     implements vscode.WebviewViewProvider, vscode.Disposable {
     private view: vscode.WebviewView | undefined;
+    private panel: vscode.WebviewPanel | undefined;
     private notebook: NotebookFigures | undefined;
     private selectedKey: string | undefined;
     private scope: SearchScope = "notebook";
@@ -46,7 +47,7 @@ export class FigureGalleryViewProvider
         type: "thumbnail" | "preview"
     ): void {
 
-        if (!this.view) {
+        if (!this.view && !this.panel) {
             return;
         }
 
@@ -62,13 +63,21 @@ export class FigureGalleryViewProvider
             return;
         }
 
-        void this.view.webview.postMessage({
+        const message = {
             type,
             key,
             mimeType: match.figure.mimeType,
             data: base64,
             version: figureVersion(match.figure),
-        });
+        };
+
+        if (this.view) {
+            void this.view.webview.postMessage(message);
+        }
+
+        if (this.panel) {
+            void this.panel.webview.postMessage(message);
+        }
     }
 
     private sendThumbnail(key: string): void {
@@ -80,6 +89,10 @@ export class FigureGalleryViewProvider
     }
 
     constructor(private readonly revealCell: (figure: FigureRecord) => void) {}
+
+    getEditorViewColumn(): vscode.ViewColumn | undefined {
+        return this.panel?.viewColumn;
+    }
 
     resolveWebviewView(webviewView: vscode.WebviewView): void {
         this.view = webviewView;
@@ -99,15 +112,58 @@ export class FigureGalleryViewProvider
         this.sendCatalog();
     }
 
+    getEditorColumn(): vscode.ViewColumn | undefined {
+        return this.panel?.viewColumn;
+    }
+
+    openInEditor(): void {
+        if (this.panel) {
+            this.panel.reveal();
+            this.sendCatalog();
+            return;
+        }
+
+        this.panel = vscode.window.createWebviewPanel(
+            "figureExplorer.galleryPanel",
+            "Figure Gallery",
+            vscode.ViewColumn.Active,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true,
+            }
+        );
+
+        this.panel.webview.html = galleryShellHtml(true);
+
+        this.panel.webview.onDidReceiveMessage(
+            (message: GalleryMessage) => this.handleMessage(message),
+            undefined,
+            this.disposables
+        );
+
+        this.panel.onDidDispose(() => {
+            this.panel = undefined;
+        }, undefined, this.disposables);
+
+        this.sendCatalog();
+    }
+
     show(notebook: NotebookFigures, selectedFigureId?: string): void {
         this.notebook = notebook;
         this.rebuildFigureList();
+
         if (selectedFigureId) {
             this.selectedKey = figureKey(notebook, selectedFigureId);
         }
 
         this.ensureSelection();
-        this.view?.show(false);
+
+        if (this.panel) {
+            this.panel.reveal();
+        } else {
+            this.view?.show(false);
+        }
+
         this.sendCatalog();
     }
     refresh(): void {
@@ -259,7 +315,7 @@ export class FigureGalleryViewProvider
     }
 
     private sendCatalog(): void {
-        if (!this.view) {
+        if (!this.view && !this.panel) {
             return;
         }
 
@@ -280,14 +336,22 @@ export class FigureGalleryViewProvider
             })
         );
 
-        void this.view.webview.postMessage({
+        const message = {
             type: "setCatalog",
             scope: this.scope,
             selectedKey: this.selectedKey,
             notebookName: this.notebook?.name ?? "",
             totalFigures: payload.length,
             figures: payload,
-        });
+        };
+
+        if (this.view) {
+            void this.view.webview.postMessage(message);
+        }
+
+        if (this.panel) {
+            void this.panel.webview.postMessage(message);
+        }
     }
 }
 

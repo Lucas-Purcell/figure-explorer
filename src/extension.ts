@@ -47,7 +47,7 @@ export function activate(context: vscode.ExtensionContext): void {
     output.show(true);
     const provider = new FigureTreeProvider();
     const gallery = new FigureGalleryViewProvider((figure: FigureRecord) => {
-        void revealNotebookCell(figure);
+        void revealNotebookCell(figure, gallery.getEditorColumn());
     });
 
     const treeView = vscode.window.createTreeView("figureExplorer.figures", {
@@ -157,6 +157,12 @@ export function activate(context: vscode.ExtensionContext): void {
             scanNotebookCommand(provider)
         ),
         vscode.commands.registerCommand(
+            "figure-explorer.revealFigureCell",
+            (item: FigureTreeItem) => {
+                void revealNotebookCell(item.figure, gallery.getEditorColumn());
+            }
+        ),
+        vscode.commands.registerCommand(
             "figure-explorer.openNotebookGallery",
             (notebook: NotebookFigures) => gallery.show(notebook)
         ),
@@ -170,9 +176,9 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         ),
         vscode.commands.registerCommand(
-            "figure-explorer.revealFigureCell",
-            (item: FigureTreeItem) => {
-                void revealNotebookCell(item.figure);
+            "figure-explorer.openGalleryInEditor",
+            () => {
+                gallery.openInEditor();
             }
         ),
         vscode.commands.registerCommand(
@@ -264,7 +270,10 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 }
 
-async function revealNotebookCell(figure: FigureRecord): Promise<void> {
+async function revealNotebookCell(
+    figure: FigureRecord,
+    preferredColumn?: vscode.ViewColumn
+): Promise<void> {
     try {
         const document = vscode.workspace.notebookDocuments.find(
             (notebook: vscode.NotebookDocument) =>
@@ -278,13 +287,19 @@ async function revealNotebookCell(figure: FigureRecord): Promise<void> {
             return;
         }
 
-        const existingEditor = vscode.window.visibleNotebookEditors.find(
-            (editor: vscode.NotebookEditor) =>
-                editor.notebook.uri.toString() === document.uri.toString()
-        );
-        const anotherNotebookEditor = vscode.window.visibleNotebookEditors[0];
+        const existingEditor =
+            vscode.window.visibleNotebookEditors.find(
+                (editor: vscode.NotebookEditor) =>
+                    editor.notebook.uri.toString() ===
+                    document.uri.toString()
+            );
+
+        const anotherNotebookEditor =
+            vscode.window.visibleNotebookEditors[0];
+
         const notebookColumn =
             existingEditor?.viewColumn ??
+            preferredColumn ??
             anotherNotebookEditor?.viewColumn ??
             vscode.window.activeTextEditor?.viewColumn ??
             vscode.ViewColumn.One;

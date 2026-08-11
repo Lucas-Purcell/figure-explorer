@@ -2,7 +2,7 @@
   "name": "figure-explorer",
   "displayName": "Figure Explorer",
   "description": "Browse figures generated in Jupyter notebooks.",
-  "version": "0.1.6",
+  "version": "0.1.9",
   "publisher": "LPurcell",
   "license": "MIT",
   "repository": {
@@ -10,7 +10,7 @@
     "url": "https://github.com/Lucas-Purcell/figure-explorer"
   },
   "engines": {
-    "vscode": "^1.125.0"
+    "vscode": "^1.74.0"
   },
   "categories": [
     "Notebooks",
@@ -45,6 +45,10 @@
         "title": "Figure Explorer: Open Figure in Gallery"
       },
       {
+        "command": "figure-explorer.openGalleryInEditor",
+        "title": "Figure Explorer: Open Gallery in Editor"
+      },
+      {
         "command": "figure-explorer.revealFigureCell",
         "title": "Figure Explorer: Reveal Cell"
       },
@@ -55,6 +59,10 @@
       {
         "command": "figure-explorer.exportFigureAsPdf",
         "title": "Figure Explorer: Export PDF"
+      },
+      {
+        "command": "figure-explorer.openGalleryInEditor",
+        "title": "Figure Explorer: Open Gallery in Editor"
       }
     ],
     "menus": {
@@ -86,12 +94,14 @@
       ]
     },
     "views": {
-      "figureExplorer": [
+      "explorer": [
         {
           "id": "figureExplorer.figures",
           "name": "Figures",
           "icon": "resources/Icon.svg"
-        },
+        }
+      ],
+      "figureExplorer": [
         {
           "id": "figureExplorer.gallery",
           "name": "Gallery",
@@ -118,7 +128,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
-    "@types/vscode": "^1.125.0",
+    "@types/vscode": "^1.74.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.0.0",
     "esbuild": "^0.28.1",

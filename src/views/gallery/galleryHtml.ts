@@ -26,7 +26,7 @@ function createNonce(): string {
 }
 
 
-export function galleryShellHtml(): string {
+export function galleryShellHtml(editorMode = false): string {
     const nonce = createNonce();
 
     return `<!DOCTYPE html>
@@ -40,7 +40,7 @@ export function galleryShellHtml(): string {
     </style>
 </head>
 
-<body>
+<body class="${editorMode ? "editor-mode" : ""}">
 
 <header>
 

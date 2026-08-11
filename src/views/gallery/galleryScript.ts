@@ -645,6 +645,8 @@ function enterComparisonMode(): void {
 
     comparisonMode = true;
 
+    document.body.classList.add("comparison-mode");
+
     thumbnails.style.display = "none";
     source.style.display = "none";
 
@@ -656,6 +658,8 @@ function enterComparisonMode(): void {
 function exitComparisonMode(): void {
     comparisonMode = false;
     comparisonKeys = [];
+
+    document.body.classList.remove("comparison-mode");
 
     thumbnails.style.display = "";
     source.style.display = "";

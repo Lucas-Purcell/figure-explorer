@@ -78,6 +78,24 @@ const previewVersions =
     new Map<string, string>();
 
 /* ─────────────────────────────────────────────
+   Preview zoom / pan
+   ───────────────────────────────────────────── */
+
+let previewZoom = 1;
+let previewPanX = 0;
+let previewPanY = 0;
+
+let previewDragging = false;
+let previewDragStartX = 0;
+let previewDragStartY = 0;
+let previewDragPanX = 0;
+let previewDragPanY = 0;
+
+const MIN_PREVIEW_ZOOM = 1;
+const MAX_PREVIEW_ZOOM = 8;
+const ZOOM_FACTOR = 1.15;
+
+/* ─────────────────────────────────────────────
    DOM elements
    ───────────────────────────────────────────── */
 
@@ -250,6 +268,9 @@ window.addEventListener(
 
             img.onload = () => {
                 img.classList.add("loaded");
+
+                clampPreviewPan();
+                applyPreviewTransform();
             };
 
             img.src =
@@ -935,6 +956,320 @@ document.addEventListener("keydown", (event) => {
     }
 });
 
+function resetPreviewTransform(): void {
+    previewZoom = 1;
+    previewPanX = 0;
+    previewPanY = 0;
+
+    applyPreviewTransform();
+}
+
+function applyPreviewTransform(): void {
+    const image =
+        preview.querySelector<HTMLImageElement>(
+            "#preview-image"
+        );
+
+    if (!image) {
+        return;
+    }
+
+    image.style.transform =
+        `translate3d(${previewPanX}px, ${previewPanY}px, 0) ` +
+        `scale(${previewZoom})`;
+
+    image.classList.toggle(
+        "zoomed",
+        previewZoom > 1.001
+    );
+}
+
+function clampPreviewPan(): void {
+    const image =
+        preview.querySelector<HTMLImageElement>(
+            "#preview-image"
+        );
+
+    const viewport =
+        preview.querySelector<HTMLElement>(
+            ".preview-image-viewport"
+        );
+
+    if (!image || !viewport) {
+        return;
+    }
+
+    if (previewZoom <= 1) {
+        previewPanX = 0;
+        previewPanY = 0;
+        return;
+    }
+
+    const viewportWidth =
+        viewport.clientWidth;
+
+    const viewportHeight =
+        viewport.clientHeight;
+
+    const imageWidth =
+        image.offsetWidth * previewZoom;
+
+    const imageHeight =
+        image.offsetHeight * previewZoom;
+
+    const maxPanX =
+        Math.max(
+            0,
+            (imageWidth - viewportWidth) / 2
+        );
+
+    const maxPanY =
+        Math.max(
+            0,
+            (imageHeight - viewportHeight) / 2
+        );
+
+    previewPanX = Math.max(
+        -maxPanX,
+        Math.min(maxPanX, previewPanX)
+    );
+
+    previewPanY = Math.max(
+        -maxPanY,
+        Math.min(maxPanY, previewPanY)
+    );
+}
+
+function setPreviewZoom(
+    newZoom: number,
+    cursorX?: number,
+    cursorY?: number
+): void {
+    const image =
+        preview.querySelector<HTMLImageElement>(
+            "#preview-image"
+        );
+
+    const viewport =
+        preview.querySelector<HTMLElement>(
+            ".preview-image-viewport"
+        );
+
+    if (!image || !viewport) {
+        return;
+    }
+
+    const oldZoom = previewZoom;
+
+    previewZoom = Math.max(
+        MIN_PREVIEW_ZOOM,
+        Math.min(MAX_PREVIEW_ZOOM, newZoom)
+    );
+
+    if (previewZoom === oldZoom) {
+        return;
+    }
+
+    /*
+     * Keep the point underneath the cursor
+     * stationary while zooming.
+     */
+    if (
+        cursorX !== undefined &&
+        cursorY !== undefined
+    ) {
+        const rect =
+            viewport.getBoundingClientRect();
+
+        const x =
+            cursorX - rect.left - rect.width / 2;
+
+        const y =
+            cursorY - rect.top - rect.height / 2;
+
+        const zoomRatio =
+            previewZoom / oldZoom;
+
+        previewPanX =
+            x -
+            (x - previewPanX) * zoomRatio;
+
+        previewPanY =
+            y -
+            (y - previewPanY) * zoomRatio;
+    }
+
+    if (previewZoom === 1) {
+        previewPanX = 0;
+        previewPanY = 0;
+    }
+
+    clampPreviewPan();
+    applyPreviewTransform();
+}
+
+function zoomPreviewAtPoint(
+    delta: number,
+    clientX: number,
+    clientY: number
+): void {
+    const direction =
+        delta < 0
+            ? ZOOM_FACTOR
+            : 1 / ZOOM_FACTOR;
+
+    setPreviewZoom(
+        previewZoom * direction,
+        clientX,
+        clientY
+    );
+}
+
+function setupPreviewInteractions(): void {
+    const viewport =
+        preview.querySelector<HTMLElement>(
+            ".preview-image-viewport"
+        );
+
+    const image =
+        preview.querySelector<HTMLImageElement>(
+            "#preview-image"
+        );
+
+    if (!viewport || !image) {
+        return;
+    }
+
+    /*
+     * Prevent the browser/webview from interpreting
+     * pointer gestures as text/image dragging.
+     */
+    viewport.style.touchAction = "none";
+
+    viewport.addEventListener(
+        "wheel",
+        (event) => {
+            /*
+            * Chromium reports trackpad pinch gestures
+            * as ctrlKey + wheel.
+            */
+            if (event.ctrlKey) {
+                event.preventDefault();
+
+                zoomPreviewAtPoint(
+                    event.deltaY,
+                    event.clientX,
+                    event.clientY
+                );
+
+                return;
+            }
+
+            /*
+            * At 1x, allow the normal preview scrolling.
+            *
+            * When zoomed, use the wheel/trackpad to pan
+            * around the image.
+            */
+            if (previewZoom > 1) {
+                event.preventDefault();
+
+                previewPanX -= event.deltaX;
+                previewPanY -= event.deltaY;
+
+                clampPreviewPan();
+                applyPreviewTransform();
+            }
+        },
+        { passive: false }
+    );
+
+    viewport.addEventListener(
+        "pointerdown",
+        (event) => {
+            if (event.button !== 0) {
+                return;
+            }
+
+            if (previewZoom <= 1) {
+                return;
+            }
+
+            previewDragging = true;
+
+            previewDragStartX =
+                event.clientX;
+
+            previewDragStartY =
+                event.clientY;
+
+            previewDragPanX =
+                previewPanX;
+
+            previewDragPanY =
+                previewPanY;
+
+            viewport.setPointerCapture(
+                event.pointerId
+            );
+
+            viewport.classList.add("panning");
+        }
+    );
+
+    viewport.addEventListener(
+        "pointermove",
+        (event) => {
+            if (!previewDragging) {
+                return;
+            }
+
+            previewPanX =
+                previewDragPanX +
+                (event.clientX -
+                    previewDragStartX);
+
+            previewPanY =
+                previewDragPanY +
+                (event.clientY -
+                    previewDragStartY);
+
+            clampPreviewPan();
+            applyPreviewTransform();
+        }
+    );
+
+    const stopDragging = () => {
+        previewDragging = false;
+        viewport.classList.remove("panning");
+    };
+
+    viewport.addEventListener(
+        "pointerup",
+        stopDragging
+    );
+
+    viewport.addEventListener(
+        "pointercancel",
+        stopDragging
+    );
+
+    viewport.addEventListener(
+        "dblclick",
+        () => {
+            resetPreviewTransform();
+        }
+    );
+
+    window.addEventListener(
+        "resize",
+        () => {
+            clampPreviewPan();
+            applyPreviewTransform();
+        }
+    );
+}
+
 /* ─────────────────────────────────────────────
    Preview
    ───────────────────────────────────────────── */
@@ -1015,9 +1350,11 @@ function updatePreview(): void {
         escapeHtml(figureTitle) +
         "</h2>" +
         tagHtml +
-        '<img id="preview-image" ' +
-        'class="main-image" ' +
-        'alt="preview">';
+        '<div class="preview-image-viewport">' +
+            '<img id="preview-image" ' +
+            'class="main-image" ' +
+            'alt="preview">' +
+        "</div>";
 
     preview
         .querySelectorAll<HTMLElement>(".tag")
@@ -1030,6 +1367,9 @@ function updatePreview(): void {
                 }
             });
         });
+
+    resetPreviewTransform();
+    setupPreviewInteractions();
 
     vscode.postMessage({
         type: "requestPreview",
@@ -1070,13 +1410,13 @@ function updatePreviewMetadata(
 
             tagsContainer.className = "tags";
 
-            const image =
-                preview.querySelector<HTMLImageElement>(
-                    "#preview-image"
+            const imageViewport =
+                preview.querySelector<HTMLElement>(
+                    ".preview-image-viewport"
                 );
 
-            if (image) {
-                image.before(tagsContainer);
+            if (imageViewport) {
+                imageViewport.before(tagsContainer);
             }
         }
 

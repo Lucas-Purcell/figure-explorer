@@ -889,13 +889,45 @@ body.editor-mode .source {
 /* Make the main figure use the available preview area
    rather than forcing a fixed height. */
 
-body.editor-mode .main-image {
+body.editor-mode .preview-image-viewport {
+    position: relative;
     width: 100%;
-    max-width: 100%;
-    height: auto;
-    max-height: calc(100vh - 170px);
+    height: calc(100vh - 170px);
     margin-top: 12px;
+    overflow: hidden;
+    background: var(--vscode-editor-background);
+    cursor: zoom-in;
+    user-select: none;
+}
+
+body.editor-mode .main-image {
+    display: block;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    margin: 0;
     object-fit: contain;
+
+    transform-origin: center center;
+    will-change: transform;
+
+    user-select: none;
+    -webkit-user-drag: none;
+
+    cursor: zoom-in;
+}
+
+body.editor-mode .main-image.zoomed {
+    cursor: grab;
+}
+
+body.editor-mode .preview-image-viewport.panning {
+    cursor: grabbing;
+}
+
+body.editor-mode .preview-image-viewport.panning .main-image {
+    cursor: grabbing;
 }
 
 /* Keep the preview title and tags above the image. */

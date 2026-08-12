@@ -13,15 +13,13 @@ import { FigureTreeItem } from "./views/figureTreeProvider";
 
 const refreshDelayMs = 150;
 
-const output = vscode.window.createOutputChannel("Figure Explorer");
-
 function log(message: string, ...values: unknown[]): void {
     const suffix = values.length
         ? " " + values.map(formatLogValue).join(" ")
         : "";
 
-    output.appendLine(
-        `[${new Date().toISOString()}] ${message}${suffix}`
+    console.debug(
+        `[Figure Explorer] ${message}${suffix}`
     );
 }
 
@@ -44,7 +42,7 @@ export function activate(context: vscode.ExtensionContext): void {
     log("VS Code version:", vscode.version);
     log("========================================");
 
-    output.show(true);
+
     const provider = new FigureTreeProvider();
     const gallery = new FigureGalleryViewProvider((figure: FigureRecord) => {
         void revealNotebookCell(figure, gallery.getEditorColumn());
@@ -159,7 +157,17 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand(
             "figure-explorer.revealFigureCell",
             (item: FigureTreeItem) => {
-                void revealNotebookCell(item.figure, gallery.getEditorColumn());
+                if (!item?.figure) {
+                    vscode.window.showWarningMessage(
+                        "No figure was selected."
+                    );
+                    return;
+                }
+
+                void revealNotebookCell(
+                    item.figure,
+                    gallery.getEditorColumn()
+                );
             }
         ),
         vscode.commands.registerCommand(
@@ -274,6 +282,13 @@ async function revealNotebookCell(
     figure: FigureRecord,
     preferredColumn?: vscode.ViewColumn
 ): Promise<void> {
+    if (!figure?.notebookUri) {
+        vscode.window.showWarningMessage(
+            "The selected figure does not have a valid notebook reference."
+        );
+        return;
+    }
+
     try {
         const document = vscode.workspace.notebookDocuments.find(
             (notebook: vscode.NotebookDocument) =>

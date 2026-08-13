@@ -49,8 +49,17 @@ interface GalleryVsCodeMessage {
         | "requestPreview"
         | "selectFigure"
         | "setScope"
-        | "revealCell";
+        | "revealCell"
+        | "savePNG"
+        | "exportPdf"
+        | "copyImage"
+        | "exportAllPng"
+        | "exportAllPdf";
+
     key?: string;
+
+    keys?: string[];
+
     scope?: "notebook" | "all";
 }
 
@@ -68,7 +77,8 @@ let scope: "notebook" | "all" = "notebook";
 let titleFilter: "all" | "titled" | "untitled" = "all";
 let activeTags: string[] = [];
 
-let comparisonKeys: string[] = [];
+let selectedKeys: string[] = [];
+let selectionAnchorKey: string | undefined;
 let comparisonMode = false;
 
 const previewImages =
@@ -77,6 +87,15 @@ const previewImages =
 const previewVersions =
     new Map<string, string>();
 
+let pendingCopyKey: string | undefined;
+
+
+let isGalleryDragging = false;
+let galleryDragStartX = 0;
+let galleryDragStartY = 0;
+let galleryDragAdditive = false;
+
+let selectionRectangle: HTMLDivElement | undefined;
 /* ─────────────────────────────────────────────
    Preview zoom / pan
    ───────────────────────────────────────────── */
@@ -93,7 +112,23 @@ let previewDragPanY = 0;
 
 const MIN_PREVIEW_ZOOM = 1;
 const MAX_PREVIEW_ZOOM = 8;
-const ZOOM_FACTOR = 1.15;
+const ZOOM_FACTOR = 1.08;
+
+interface ComparisonImageTransform {
+    zoom: number;
+    panX: number;
+    panY: number;
+}
+
+const comparisonTransforms =
+    new Map<string, ComparisonImageTransform>();
+
+let comparisonDragging = false;
+let comparisonDragKey: string | undefined;
+let comparisonDragStartX = 0;
+let comparisonDragStartY = 0;
+let comparisonDragPanX = 0;
+let comparisonDragPanY = 0;
 
 /* ─────────────────────────────────────────────
    DOM elements
@@ -159,6 +194,8 @@ if (
 ) {
     throw new Error("Figure Gallery DOM is incomplete.");
 }
+
+setupGalleryDragSelection();
 
 /* ─────────────────────────────────────────────
    Lazy thumbnail loading
@@ -233,18 +270,30 @@ window.addEventListener(
         }
 
         if (message.type === "preview") {
-            previewImages.set(
-                message.key,
+            const imageData =
                 "data:" +
                 message.mimeType +
                 ";base64," +
-                message.data
+                message.data;
+
+            previewImages.set(
+                message.key,
+                imageData
             );
 
             previewVersions.set(
                 message.key,
                 message.version
             );
+
+            if (pendingCopyKey === message.key) {
+                pendingCopyKey = undefined;
+
+                void copyImageToClipboard(
+                    imageData,
+                    message.mimeType
+                );
+            }
 
             if (comparisonMode) {
                 renderComparison();
@@ -286,6 +335,13 @@ window.addEventListener(
             return;
         }
 
+        console.log(
+            "GALLERY setCatalog:",
+            message.figures.length,
+            message.scope,
+            message.notebookName
+        );
+
         catalog = message.figures;
         selectedKey = message.selectedKey;
         scope = message.scope;
@@ -294,6 +350,11 @@ window.addEventListener(
             scope === "all"
                 ? "All open notebooks"
                 : message.notebookName || "Figure Gallery";
+
+        console.log(
+            "GALLERY catalog after assignment:",
+            catalog.length
+        );
 
         render();
     }
@@ -545,6 +606,8 @@ compare.addEventListener("click", () => {
 
 function selectThumbnail(key: string): void {
     selectedKey = key;
+    selectedKeys = [key];
+    selectionAnchorKey = key;
 
     renderThumbnailSelection();
 
@@ -558,26 +621,116 @@ function selectThumbnail(key: string): void {
     }
 }
 
-function toggleComparisonFigure(key: string): void {
-    const index = comparisonKeys.indexOf(key);
+function toggleSelectedFigure(key: string): void {
+    const index = selectedKeys.indexOf(key);
 
     if (index >= 0) {
-        comparisonKeys.splice(index, 1);
+        selectedKeys.splice(index, 1);
+
+        /*
+         * If the primary selection was removed,
+         * use the last remaining selection as the
+         * preview/current figure.
+         */
+        if (selectedKey === key) {
+            selectedKey =
+                selectedKeys[selectedKeys.length - 1];
+        }
     } else {
-        comparisonKeys.push(key);
+        selectedKeys.push(key);
+        selectedKey = key;
     }
 
-    updateComparisonUI();
+    /*
+     * Cmd/Ctrl-click becomes the new Shift-click
+     * anchor.
+     */
+    selectionAnchorKey = key;
+
     renderThumbnailSelection();
 
-    if (comparisonMode) {
-        if (comparisonKeys.length < 2) {
-            exitComparisonMode();
-        } else {
-            requestComparisonImages();
-            renderComparison();
-        }
+    if (selectedKey) {
+        vscode.postMessage({
+            type: "selectFigure",
+            key: selectedKey,
+        });
     }
+
+    if (!comparisonMode) {
+        updatePreview();
+    }
+}
+
+function selectFigureRange(key: string): void {
+    const results = filteredCatalog();
+
+    const clickedIndex =
+        results.findIndex(
+            (figure) => figure.key === key
+        );
+
+    if (clickedIndex === -1) {
+        return;
+    }
+
+    const anchorKey =
+        selectionAnchorKey || selectedKey;
+
+    const anchorIndex =
+        anchorKey
+            ? results.findIndex(
+                  (figure) =>
+                      figure.key === anchorKey
+              )
+            : -1;
+
+    if (anchorIndex === -1) {
+        selectThumbnail(key);
+        return;
+    }
+
+    const start =
+        Math.min(anchorIndex, clickedIndex);
+
+    const end =
+        Math.max(anchorIndex, clickedIndex);
+
+    selectedKeys = results
+        .slice(start, end + 1)
+        .map((figure) => figure.key);
+
+    selectedKey = key;
+
+    /*
+     * Keep the original anchor so repeated Shift-clicks
+     * behave like a file manager.
+     */
+    selectionAnchorKey = anchorKey;
+
+    renderThumbnailSelection();
+
+    vscode.postMessage({
+        type: "selectFigure",
+        key,
+    });
+
+    if (!comparisonMode) {
+        updatePreview();
+    }
+}
+
+function updateSelectionUI(): void {
+    compare.disabled = selectedKeys.length < 2;
+
+    compare.textContent =
+        selectedKeys.length > 0
+            ? "Compare (" + selectedKeys.length + ")"
+            : "Compare";
+
+    compare.classList.toggle(
+        "active",
+        comparisonMode
+    );
 }
 
 function renderThumbnailSelection(): void {
@@ -586,60 +739,36 @@ function renderThumbnailSelection(): void {
         .forEach((button) => {
             const key = button.dataset.key;
 
-            const isSelected =
+            if (!key) {
+                return;
+            }
+
+            const isPrimary =
                 key === selectedKey;
 
-            const comparisonIndex =
-                key
-                    ? comparisonKeys.indexOf(key)
-                    : -1;
-
-            const isComparisonSelected =
-                comparisonIndex >= 0;
+            const isSelected =
+                selectedKeys.includes(key);
 
             button.classList.toggle(
                 "selected",
-                isSelected
+                isPrimary
             );
 
             button.classList.toggle(
                 "comparison-selected",
-                isComparisonSelected
+                isSelected
             );
-
-            const existingMarker =
-                button.querySelector<HTMLElement>(
-                    ".comparison-marker"
-                );
-
-            if (isComparisonSelected) {
-                if (existingMarker) {
-                    existingMarker.textContent =
-                        String(comparisonIndex + 1);
-                } else {
-                    const marker =
-                        document.createElement("span");
-
-                    marker.className =
-                        "comparison-marker";
-
-                    marker.textContent =
-                        String(comparisonIndex + 1);
-
-                    button.prepend(marker);
-                }
-            } else {
-                existingMarker?.remove();
-            }
         });
+
+    updateSelectionUI();
 }
 
 function updateComparisonUI(): void {
-    compare.disabled = comparisonKeys.length < 2;
+    compare.disabled = selectedKeys.length < 2;
 
     compare.textContent =
-        comparisonKeys.length > 0
-            ? "Compare (" + comparisonKeys.length + ")"
+        selectedKeys.length > 0
+            ? "Compare (" + selectedKeys.length + ")"
             : "Compare";
 
     compare.classList.toggle(
@@ -649,7 +778,7 @@ function updateComparisonUI(): void {
 }
 
 function requestComparisonImages(): void {
-    comparisonKeys.forEach((key) => {
+    selectedKeys.forEach((key) => {
         if (!previewImages.has(key)) {
             vscode.postMessage({
                 type: "requestPreview",
@@ -660,32 +789,35 @@ function requestComparisonImages(): void {
 }
 
 function enterComparisonMode(): void {
-    if (comparisonKeys.length < 2) {
+    if (selectedKeys.length < 2) {
         return;
     }
 
     comparisonMode = true;
 
-    document.body.classList.add("comparison-mode");
+    document.body.classList.add(
+        "comparison-mode"
+    );
 
     thumbnails.style.display = "none";
     source.style.display = "none";
 
     requestComparisonImages();
     renderComparison();
-    updateComparisonUI();
+    updateSelectionUI();
 }
 
 function exitComparisonMode(): void {
     comparisonMode = false;
-    comparisonKeys = [];
 
-    document.body.classList.remove("comparison-mode");
+    document.body.classList.remove(
+        "comparison-mode"
+    );
 
     thumbnails.style.display = "";
     source.style.display = "";
 
-    updateComparisonUI();
+    updateSelectionUI();
     renderThumbnailSelection();
     updatePreview();
 }
@@ -695,7 +827,7 @@ function renderComparison(): void {
         return;
     }
 
-    const figures = comparisonKeys
+    const figures = selectedKeys
         .map((key) =>
             catalog.find(
                 (figure) => figure.key === key
@@ -722,9 +854,23 @@ function renderComparison(): void {
                     " figures" +
                 "</span>" +
             "</div>" +
-            '<button id="exit-comparison" type="button">' +
-                "Exit comparison" +
-            "</button>" +
+
+            '<div class="comparison-header-actions">' +
+
+                '<button id="export-all-png" type="button">' +
+                    "Export All PNG" +
+                "</button>" +
+
+                '<button id="export-all-pdf" type="button">' +
+                    "Export All PDF" +
+                "</button>" +
+
+                '<button id="exit-comparison" type="button">' +
+                    "Exit comparison" +
+                "</button>" +
+
+            "</div>" +
+
         "</div>" +
 
         '<div class="comparison-grid">' +
@@ -741,18 +887,23 @@ function renderComparison(): void {
                         );
 
                     const imageHtml = image
-                        ? '<img class="comparison-image loaded" ' +
-                          'src="' +
-                          escapeHtml(image) +
-                          '" ' +
-                          'alt="' +
-                          escapeHtml(
-                              figureTitle
-                          ) +
-                          '">'
-                        : '<div class="comparison-image-loading">' +
-                          "Loading…" +
-                          "</div>";
+                        ? '<div class="comparison-image-viewport" ' +
+                            'data-key="' +
+                            escapeHtml(figure.key) +
+                            '">' +
+                            '<img class="comparison-image loaded" ' +
+                            'src="' +
+                            escapeHtml(image) +
+                            '" ' +
+                            'alt="' +
+                            escapeHtml(figureTitle) +
+                            '">' +
+                            "</div>"
+                        : '<div class="comparison-image-viewport">' +
+                            '<div class="comparison-image-loading">' +
+                            "Loading…" +
+                            "</div>" +
+                            "</div>";
 
                     const tags =
                         figure.tags || [];
@@ -780,9 +931,35 @@ function renderComparison(): void {
 
                             '<div class="comparison-card-content">' +
 
-                                '<h3>' +
-                                    escapeHtml(figureTitle) +
-                                "</h3>" +
+                                '<div class="comparison-card-header">' +
+
+                                    '<h3>' +
+                                        escapeHtml(figureTitle) +
+                                    "</h3>" +
+
+                                    '<div class="comparison-card-actions">' +
+
+                                        '<button ' +
+                                            'class="comparison-action save-png" ' +
+                                            'type="button" ' +
+                                            'data-key="' +
+                                            escapeHtml(figure.key) +
+                                            '">' +
+                                            "PNG" +
+                                        "</button>" +
+
+                                        '<button ' +
+                                            'class="comparison-action export-pdf" ' +
+                                            'type="button" ' +
+                                            'data-key="' +
+                                            escapeHtml(figure.key) +
+                                            '">' +
+                                            "PDF" +
+                                        "</button>" +
+
+                                    "</div>" +
+
+                                "</div>" +
 
                                 tagsHtml +
 
@@ -793,7 +970,107 @@ function renderComparison(): void {
                 })
                 .join("") +
         "</div>";
+    
+    preview
+        .querySelectorAll<HTMLElement>(
+            ".comparison-image-viewport[data-key]"
+        )
+        .forEach((viewport) => {
+            const key =
+                viewport.dataset.key;
 
+            if (!key) {
+                return;
+            }
+
+            const image =
+                viewport.querySelector<HTMLImageElement>(
+                    ".comparison-image"
+                );
+
+            if (!image) {
+                return;
+            }
+
+            setupComparisonImageInteractions(
+                key,
+                viewport,
+                image
+            );
+        });
+
+    preview
+        .querySelectorAll<HTMLButtonElement>(
+            ".comparison-action.save-png"
+        )
+        .forEach((button) => {
+            button.addEventListener("click", () => {
+                const key = button.dataset.key;
+
+                if (!key) {
+                    return;
+                }
+
+                vscode.postMessage({
+                    type: "savePNG",
+                    key,
+                });
+            });
+        });
+
+    preview
+        .querySelectorAll<HTMLButtonElement>(
+            ".comparison-action.export-pdf"
+        )
+        .forEach((button) => {
+            button.addEventListener("click", () => {
+                const key = button.dataset.key;
+
+                if (!key) {
+                    return;
+                }
+
+                vscode.postMessage({
+                    type: "exportPdf",
+                    key,
+                });
+            });
+        });
+    const exportAllPng =
+        document.querySelector<HTMLButtonElement>(
+            "#export-all-png"
+        );
+
+    exportAllPng?.addEventListener("click", () => {
+        if (selectedKeys.length === 0) {
+            return;
+        }
+
+        selectedKeys.forEach((key) => {
+            vscode.postMessage({
+                type: "savePNG",
+                key,
+            });
+        });
+    });
+
+    const exportAllPdf =
+        document.querySelector<HTMLButtonElement>(
+            "#export-all-pdf"
+        );
+
+    exportAllPdf?.addEventListener("click", () => {
+        if (selectedKeys.length === 0) {
+            return;
+        }
+
+        selectedKeys.forEach((key) => {
+            vscode.postMessage({
+                type: "exportPdf",
+                key,
+            });
+        });
+    });
     const exitButton =
         document.querySelector<HTMLButtonElement>(
             "#exit-comparison"
@@ -803,6 +1080,323 @@ function renderComparison(): void {
         "click",
         exitComparisonMode
     );
+}
+
+function setupComparisonImageInteractions(
+    key: string,
+    viewport: HTMLElement,
+    image: HTMLImageElement
+): void {
+    let transform =
+        comparisonTransforms.get(key);
+
+    if (!transform) {
+        transform = {
+            zoom: 1,
+            panX: 0,
+            panY: 0,
+        };
+
+        comparisonTransforms.set(
+            key,
+            transform
+        );
+    }
+
+    viewport.style.touchAction = "none";
+
+    const applyTransform = () => {
+        image.style.transform =
+            `translate3d(${transform!.panX}px, ${transform!.panY}px, 0) ` +
+            `scale(${transform!.zoom})`;
+
+        image.classList.toggle(
+            "zoomed",
+            transform!.zoom > 1.001
+        );
+    };
+
+    const clampPan = () => {
+        if (transform!.zoom <= 1) {
+            transform!.panX = 0;
+            transform!.panY = 0;
+            return;
+        }
+
+        const viewportWidth =
+            viewport.clientWidth;
+
+        const viewportHeight =
+            viewport.clientHeight;
+
+        const imageWidth =
+            image.offsetWidth *
+            transform!.zoom;
+
+        const imageHeight =
+            image.offsetHeight *
+            transform!.zoom;
+
+        const maxPanX =
+            Math.max(
+                0,
+                (imageWidth - viewportWidth) / 2
+            );
+
+        const maxPanY =
+            Math.max(
+                0,
+                (imageHeight - viewportHeight) / 2
+            );
+
+        transform!.panX =
+            Math.max(
+                -maxPanX,
+                Math.min(
+                    maxPanX,
+                    transform!.panX
+                )
+            );
+
+        transform!.panY =
+            Math.max(
+                -maxPanY,
+                Math.min(
+                    maxPanY,
+                    transform!.panY
+                )
+            );
+    };
+
+    const zoomAtPoint = (
+        delta: number,
+        clientX: number,
+        clientY: number
+    ) => {
+        const oldZoom =
+            transform!.zoom;
+
+        const direction =
+            delta < 0
+                ? ZOOM_FACTOR
+                : 1 / ZOOM_FACTOR;
+
+        const newZoom =
+            Math.max(
+                MIN_PREVIEW_ZOOM,
+                Math.min(
+                    MAX_PREVIEW_ZOOM,
+                    oldZoom * direction
+                )
+            );
+
+        if (newZoom === oldZoom) {
+            return;
+        }
+
+        const rect =
+            viewport.getBoundingClientRect();
+
+        const x =
+            clientX -
+            rect.left -
+            rect.width / 2;
+
+        const y =
+            clientY -
+            rect.top -
+            rect.height / 2;
+
+        const zoomRatio =
+            newZoom / oldZoom;
+
+        transform!.panX =
+            x -
+            (x - transform!.panX) *
+                zoomRatio;
+
+        transform!.panY =
+            y -
+            (y - transform!.panY) *
+                zoomRatio;
+
+        transform!.zoom = newZoom;
+
+        if (newZoom === 1) {
+            transform!.panX = 0;
+            transform!.panY = 0;
+        }
+
+        clampPan();
+        applyTransform();
+    };
+
+    viewport.addEventListener(
+        "wheel",
+        (event) => {
+            /*
+            * Ctrl + wheel is trackpad pinch in Chromium.
+            * Use it to zoom around the cursor.
+            */
+            if (event.ctrlKey) {
+                event.preventDefault();
+
+                zoomAtPoint(
+                    event.deltaY,
+                    event.clientX,
+                    event.clientY
+                );
+
+                return;
+            }
+
+            /*
+            * When zoomed, normal wheel/trackpad movement
+            * pans around the image.
+            */
+            if (transform!.zoom > 1) {
+                event.preventDefault();
+
+                transform!.panX -= event.deltaX;
+                transform!.panY -= event.deltaY;
+
+                clampPan();
+                applyTransform();
+            }
+        },
+        { passive: false }
+    );
+
+    viewport.addEventListener(
+        "pointerdown",
+        (event) => {
+            if (event.button !== 0) {
+                return;
+            }
+
+            if (transform!.zoom <= 1) {
+                return;
+            }
+
+            comparisonDragging = true;
+            comparisonDragKey = key;
+
+            comparisonDragStartX =
+                event.clientX;
+
+            comparisonDragStartY =
+                event.clientY;
+
+            comparisonDragPanX =
+                transform!.panX;
+
+            comparisonDragPanY =
+                transform!.panY;
+
+            viewport.setPointerCapture(
+                event.pointerId
+            );
+
+            viewport.classList.add(
+                "panning"
+            );
+
+            event.preventDefault();
+        }
+    );
+
+    viewport.addEventListener(
+        "pointermove",
+        (event) => {
+            if (
+                !comparisonDragging ||
+                comparisonDragKey !== key
+            ) {
+                return;
+            }
+
+            transform!.panX =
+                comparisonDragPanX +
+                (
+                    event.clientX -
+                    comparisonDragStartX
+                );
+
+            transform!.panY =
+                comparisonDragPanY +
+                (
+                    event.clientY -
+                    comparisonDragStartY
+                );
+
+            clampPan();
+            applyTransform();
+        }
+    );
+
+    const stopDragging = (
+        event?: PointerEvent
+    ) => {
+        if (
+            comparisonDragKey !== key
+        ) {
+            return;
+        }
+
+        comparisonDragging = false;
+        comparisonDragKey = undefined;
+
+        viewport.classList.remove(
+            "panning"
+        );
+
+        if (
+            event &&
+            viewport.hasPointerCapture(
+                event.pointerId
+            )
+        ) {
+            viewport.releasePointerCapture(
+                event.pointerId
+            );
+        }
+    };
+
+    viewport.addEventListener(
+        "pointerup",
+        stopDragging
+    );
+
+    viewport.addEventListener(
+        "pointercancel",
+        stopDragging
+    );
+
+    viewport.addEventListener(
+        "dblclick",
+        () => {
+            transform!.zoom = 1;
+            transform!.panX = 0;
+            transform!.panY = 0;
+
+            applyTransform();
+        }
+    );
+
+    /*
+     * The image dimensions may not be available when
+     * this function is initially called.
+     */
+    image.addEventListener(
+        "load",
+        () => {
+            clampPan();
+            applyTransform();
+        }
+    );
+
+    clampPan();
+    applyTransform();
 }
 
 function selectAdjacentFigure(
@@ -947,9 +1541,19 @@ document.addEventListener("keydown", (event) => {
         case "Escape":
             if (comparisonMode) {
                 exitComparisonMode();
-            } else if (comparisonKeys.length > 0) {
-                comparisonKeys = [];
-                updateComparisonUI();
+            } else if (selectedKeys.length > 1) {
+                /*
+                * Keep the primary figure selected, but clear
+                * the additional selections.
+                */
+                selectedKeys =
+                    selectedKey
+                        ? [selectedKey]
+                        : [];
+
+                selectionAnchorKey =
+                    selectedKey;
+
                 renderThumbnailSelection();
             }
             break;
@@ -1346,16 +1950,35 @@ function updatePreview(): void {
             : "";
 
     preview.innerHTML =
-        "<h2>" +
-        escapeHtml(figureTitle) +
-        "</h2>" +
+        '<div class="preview-header">' +
+            "<h2>" +
+                escapeHtml(figureTitle) +
+            "</h2>" +
+        "</div>" +
+
         tagHtml +
+
         '<div class="preview-image-viewport">' +
             '<img id="preview-image" ' +
             'class="main-image" ' +
             'alt="preview">' +
         "</div>";
+    
+    const imageViewport =
+        preview.querySelector<HTMLElement>(
+            ".preview-image-viewport"
+        );
 
+    imageViewport?.addEventListener(
+        "contextmenu",
+        (event) => {
+            showFigureContextMenu(
+                event,
+                selected.key
+            );
+        }
+    );
+    
     preview
         .querySelectorAll<HTMLElement>(".tag")
         .forEach((tagElement) => {
@@ -1381,6 +2004,236 @@ function updatePreview(): void {
     reveal.disabled = false;
 }
 
+async function copyFigureToClipboard(
+    key: string
+): Promise<void> {
+    console.log("COPY: started", key);
+
+    const imageData = previewImages.get(key);
+
+    console.log(
+        "COPY: image available:",
+        Boolean(imageData)
+    );
+
+    if (!imageData) {
+        console.log(
+            "COPY: requesting preview"
+        );
+
+        pendingCopyKey = key;
+
+        vscode.postMessage({
+            type: "requestPreview",
+            key,
+        });
+
+        return;
+    }
+
+    try {
+        console.log("COPY: fetching image");
+
+        const response = await fetch(imageData);
+
+        console.log(
+            "COPY: fetch response",
+            response.ok,
+            response.status,
+            response.type
+        );
+
+        const blob = await response.blob();
+
+        console.log(
+            "COPY: blob",
+            blob.type,
+            blob.size
+        );
+
+        console.log(
+            "COPY: clipboard object",
+            Boolean(navigator.clipboard)
+        );
+
+        console.log(
+            "COPY: ClipboardItem",
+            typeof ClipboardItem
+        );
+
+        const clipboardItem =
+            new ClipboardItem({
+                "image/png": blob,
+            });
+
+        console.log(
+            "COPY: ClipboardItem created"
+        );
+
+        await navigator.clipboard.write([
+            clipboardItem,
+        ]);
+
+        console.log(
+            "COPY: clipboard write succeeded"
+        );
+    } catch (error) {
+        console.error(
+            "COPY: FAILED",
+            error
+        );
+    }
+}
+
+function showFigureContextMenu(
+    event: MouseEvent,
+    key: string
+): void {
+    event.preventDefault();
+    
+    if (!previewImages.has(key)) {
+        vscode.postMessage({
+            type: "requestPreview",
+            key,
+        });
+    }
+    
+    const existing =
+        document.querySelector<HTMLElement>(
+            ".figure-context-menu"
+        );
+
+    existing?.remove();
+
+    const menu =
+        document.createElement("div");
+
+    menu.className = "figure-context-menu";
+
+    menu.innerHTML =
+        '<button type="button" data-action="copy-image">' +
+            "Copy Image" +
+        "</button>" +
+        '<button type="button" data-action="save-png">' +
+            "Save PNG" +
+        "</button>" +
+        '<button type="button" data-action="export-pdf">' +
+            "Export PDF" +
+        "</button>";
+
+    document.body.appendChild(menu);
+
+    const menuWidth = menu.offsetWidth;
+    const menuHeight = menu.offsetHeight;
+
+    menu.style.left =
+        Math.min(
+            event.clientX,
+            window.innerWidth - menuWidth - 8
+        ) + "px";
+
+    menu.style.top =
+        Math.min(
+            event.clientY,
+            window.innerHeight - menuHeight - 8
+        ) + "px";
+
+    menu
+        .querySelector<HTMLButtonElement>(
+            '[data-action="copy-image"]'
+        )
+        ?.addEventListener("click", async () => {
+            await copyFigureToClipboard(key);
+            menu.remove();
+        });
+
+    menu
+        .querySelector<HTMLButtonElement>(
+            '[data-action="save-png"]'
+        )
+        ?.addEventListener("click", () => {
+            vscode.postMessage({
+                type: "savePNG",
+                key,
+            });
+
+            menu.remove();
+        });
+
+    menu
+        .querySelector<HTMLButtonElement>(
+            '[data-action="export-pdf"]'
+        )
+        ?.addEventListener("click", () => {
+            vscode.postMessage({
+                type: "exportPdf",
+                key,
+            });
+
+            menu.remove();
+        });
+
+    const closeMenu = (closeEvent: MouseEvent) => {
+        if (!menu.contains(closeEvent.target as Node)) {
+            menu.remove();
+            document.removeEventListener(
+                "mousedown",
+                closeMenu
+            );
+        }
+    };
+
+    setTimeout(() => {
+        document.addEventListener(
+            "mousedown",
+            closeMenu
+        );
+    }, 0);
+}
+
+async function copyImageToClipboard(
+    dataUrl: string,
+    mimeType: string
+): Promise<void> {
+    try {
+        if (
+            !navigator.clipboard ||
+            typeof ClipboardItem === "undefined"
+        ) {
+            throw new Error(
+                "Image clipboard access is not supported."
+            );
+        }
+
+        const response =
+            await fetch(dataUrl);
+
+        const blob =
+            await response.blob();
+
+        let clipboardBlob = blob;
+
+        if (mimeType !== "image/png") {
+            clipboardBlob =
+                await convertImageToPng(blob);
+        }
+
+        await navigator.clipboard.write([
+            new ClipboardItem({
+                "image/png": clipboardBlob,
+            }),
+        ]);
+    } catch (error) {
+        console.error(
+            "Failed to copy image to clipboard:",
+            error
+        );
+
+        window.alert(
+            "Could not copy the image to the clipboard."
+        );
+    }
+}
 
 function updatePreviewMetadata(
     selected: GalleryFigure
@@ -1461,11 +2314,19 @@ function updatePreviewMetadata(
    ───────────────────────────────────────────── */
 
 function render(): void {
+    console.log(
+        "GALLERY render:",
+        "catalog =", catalog.length,
+        "filtered =", filteredCatalog().length,
+        "selected =", selectedKey
+    );
+
     if (comparisonMode) {
         updateComparisonUI();
         renderComparison();
         return;
     }
+
     const results = filteredCatalog();
 
     if (
@@ -1476,10 +2337,16 @@ function render(): void {
         selectedKey = results[0]?.key;
 
         if (selectedKey) {
+            selectedKeys = [selectedKey];
+            selectionAnchorKey = selectedKey;
+
             vscode.postMessage({
                 type: "selectFigure",
                 key: selectedKey,
             });
+        } else {
+            selectedKeys = [];
+            selectionAnchorKey = undefined;
         }
     }
 
@@ -1529,6 +2396,10 @@ function render(): void {
 function updateThumbnailElements(
     results: GalleryFigure[]
 ): void {
+    console.log(
+        "GALLERY thumbnails:",
+        results.length
+    );
     const existingButtons =
         new Map<string, HTMLButtonElement>();
 
@@ -1556,15 +2427,14 @@ function updateThumbnailElements(
                   figure.notebookName
                 : figureTitle;
 
-        let button =
-            existingButtons.get(figure.key);
+        let button = existingButtons.get(figure.key);
 
         if (!button) {
-            button =
+            const newButton =
                 document.createElement("button");
 
-            button.className = "thumbnail";
-            button.dataset.key = figure.key;
+            newButton.className = "thumbnail";
+            newButton.dataset.key = figure.key;
 
             const img =
                 document.createElement("img");
@@ -1572,15 +2442,18 @@ function updateThumbnailElements(
             img.className = "lazy";
             img.dataset.key = figure.key;
             img.alt = "thumbnail";
+            img.draggable = false;
 
             const labelElement =
                 document.createElement("span");
 
-            button.appendChild(img);
-            button.appendChild(labelElement);
+            labelElement.className = "thumbnail-label";
 
-            button.addEventListener("click", (event) => {
-                const key = button?.dataset.key;
+            newButton.appendChild(img);
+            newButton.appendChild(labelElement);
+
+            newButton.addEventListener("click", (event) => {
+                const key = newButton.dataset.key;
 
                 if (!key) {
                     return;
@@ -1589,20 +2462,25 @@ function updateThumbnailElements(
                 const mouseEvent =
                     event as MouseEvent;
 
-                const comparisonModifier =
+                const modifier =
                     mouseEvent.ctrlKey ||
                     mouseEvent.metaKey;
 
-                if (comparisonModifier) {
-                    toggleComparisonFigure(key);
+                if (mouseEvent.shiftKey) {
+                    selectFigureRange(key);
+                    return;
+                }
+
+                if (modifier) {
+                    toggleSelectedFigure(key);
                     return;
                 }
 
                 selectThumbnail(key);
             });
 
-            button.addEventListener("dblclick", () => {
-                const key = button?.dataset.key;
+            newButton.addEventListener("dblclick", () => {
+                const key = newButton.dataset.key;
 
                 if (!key) {
                     return;
@@ -1614,6 +2492,24 @@ function updateThumbnailElements(
                     type: "revealCell",
                 });
             });
+
+            newButton.addEventListener(
+                "contextmenu",
+                (event) => {
+                    const key = newButton.dataset.key;
+
+                    if (!key) {
+                        return;
+                    }
+
+                    showFigureContextMenu(
+                        event,
+                        key
+                    );
+                }
+            );
+
+            button = newButton;
         }
 
         const img =
@@ -1623,7 +2519,7 @@ function updateThumbnailElements(
 
         const labelElement =
             button.querySelector<HTMLSpanElement>(
-                "span:not(.comparison-marker)"
+                ".thumbnail-label"
             );
 
         if (!img || !labelElement) {
@@ -1631,6 +2527,11 @@ function updateThumbnailElements(
         }
 
         labelElement.textContent = label;
+
+        console.log(
+            "GALLERY thumbnail label:",
+            label
+        );
 
         /*
          * Preserve the existing image if this figure
@@ -1657,38 +2558,8 @@ function updateThumbnailElements(
 
         button.classList.toggle(
             "comparison-selected",
-            comparisonKeys.includes(figure.key)
+            selectedKeys.includes(figure.key)
         );
-
-        const existingMarker =
-            button.querySelector<HTMLElement>(
-                ".comparison-marker"
-            );
-
-        const comparisonIndex =
-            comparisonKeys.indexOf(
-                figure.key
-            );
-
-        if (comparisonIndex >= 0) {
-            if (existingMarker) {
-                existingMarker.textContent =
-                    String(comparisonIndex + 1);
-            } else {
-                const marker =
-                    document.createElement("span");
-
-                marker.className =
-                    "comparison-marker";
-
-                marker.textContent =
-                    String(comparisonIndex + 1);
-
-                button.prepend(marker);
-            }
-        } else {
-            existingMarker?.remove();
-        }
 
         fragment.appendChild(button);
 
@@ -1706,6 +2577,224 @@ function updateThumbnailElements(
     });
 
     thumbnails.appendChild(fragment);
+}
+
+function setupGalleryDragSelection(): void {
+    const gallery = thumbnails;
+
+    gallery.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) {
+            return;
+        }
+
+        const target = event.target as HTMLElement;
+
+        if (target.closest(".thumbnail")) {
+            return;
+        }
+
+        isGalleryDragging = true;
+
+        const rect = gallery.getBoundingClientRect();
+
+        galleryDragStartX =
+            event.clientX - rect.left + gallery.scrollLeft;
+
+        galleryDragStartY =
+            event.clientY - rect.top + gallery.scrollTop;
+
+        galleryDragAdditive =
+            event.metaKey || event.ctrlKey;
+
+        selectionRectangle =
+            document.createElement("div");
+
+        selectionRectangle.className =
+            "gallery-selection-rectangle";
+
+        selectionRectangle.style.left =
+            `${galleryDragStartX}px`;
+
+        selectionRectangle.style.top =
+            `${galleryDragStartY}px`;
+
+        selectionRectangle.style.width = "0px";
+        selectionRectangle.style.height = "0px";
+
+        gallery.appendChild(selectionRectangle);
+
+        gallery.setPointerCapture(event.pointerId);
+
+        event.preventDefault();
+    });
+
+    gallery.addEventListener("pointermove", (event) => {
+        if (!isGalleryDragging) {
+            return;
+        }
+
+        updateGallerySelectionRectangle(
+            event.clientX,
+            event.clientY
+        );
+
+        updateDragSelectedThumbnails();
+    });
+
+    const finishDrag = (event: PointerEvent) => {
+        if (!isGalleryDragging) {
+            return;
+        }
+
+        updateGallerySelectionRectangle(
+            event.clientX,
+            event.clientY
+        );
+
+        updateDragSelectedThumbnails();
+
+        isGalleryDragging = false;
+
+        selectionRectangle?.remove();
+        selectionRectangle = undefined;
+
+        if (gallery.hasPointerCapture(event.pointerId)) {
+            gallery.releasePointerCapture(event.pointerId);
+        }
+    };
+
+    gallery.addEventListener("pointerup", finishDrag);
+    gallery.addEventListener("pointercancel", finishDrag);
+}
+
+function updateGallerySelectionRectangle(
+    clientX: number,
+    clientY: number
+): void {
+    if (!selectionRectangle) {
+        return;
+    }
+
+    const rect =
+        thumbnails.getBoundingClientRect();
+
+    const currentX =
+        clientX -
+        rect.left +
+        thumbnails.scrollLeft;
+
+    const currentY =
+        clientY -
+        rect.top +
+        thumbnails.scrollTop;
+
+    const left =
+        Math.min(
+            galleryDragStartX,
+            currentX
+        );
+
+    const top =
+        Math.min(
+            galleryDragStartY,
+            currentY
+        );
+
+    const width =
+        Math.abs(
+            currentX -
+            galleryDragStartX
+        );
+
+    const height =
+        Math.abs(
+            currentY -
+            galleryDragStartY
+        );
+
+    selectionRectangle.style.left =
+        `${left}px`;
+
+    selectionRectangle.style.top =
+        `${top}px`;
+
+    selectionRectangle.style.width =
+        `${width}px`;
+
+    selectionRectangle.style.height =
+        `${height}px`;
+}
+
+function updateDragSelectedThumbnails(): void {
+    if (!selectionRectangle) {
+        return;
+    }
+
+    const selectionRect =
+        selectionRectangle.getBoundingClientRect();
+
+    const buttons =
+        Array.from(
+            thumbnails.querySelectorAll<HTMLButtonElement>(
+                ".thumbnail"
+            )
+        );
+
+    const intersectingKeys: string[] = [];
+
+    buttons.forEach((button) => {
+        const rect =
+            button.getBoundingClientRect();
+
+        const intersects =
+            rect.left < selectionRect.right &&
+            rect.right > selectionRect.left &&
+            rect.top < selectionRect.bottom &&
+            rect.bottom > selectionRect.top;
+
+        if (intersects && button.dataset.key) {
+            intersectingKeys.push(
+                button.dataset.key
+            );
+        }
+    });
+
+    if (intersectingKeys.length === 0) {
+        if (!galleryDragAdditive) {
+            selectedKeys = [];
+            selectedKey = undefined;
+            selectionAnchorKey = undefined;
+            renderThumbnailSelection();
+        }
+
+        return;
+    }
+
+    if (galleryDragAdditive) {
+        const combined =
+            new Set(selectedKeys);
+
+        intersectingKeys.forEach((key) => {
+            combined.add(key);
+        });
+
+        selectedKeys =
+            Array.from(combined);
+    } else {
+        selectedKeys =
+            intersectingKeys;
+    }
+
+    /*
+     * The last item under the drag becomes the
+     * current/preview figure.
+     */
+    selectedKey =
+        intersectingKeys[
+            intersectingKeys.length - 1
+        ];
+
+    renderThumbnailSelection();
 }
 
 function figureVersion(
@@ -1969,4 +3058,53 @@ function escapeHtml(value: string): string {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+
+async function convertImageToPng(
+    blob: Blob
+): Promise<Blob> {
+    const bitmap =
+        await createImageBitmap(blob);
+
+    const canvas =
+        document.createElement("canvas");
+
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+
+    const context =
+        canvas.getContext("2d");
+
+    if (!context) {
+        bitmap.close();
+
+        throw new Error(
+            "Could not create canvas context."
+        );
+    }
+
+    context.drawImage(
+        bitmap,
+        0,
+        0
+    );
+
+    bitmap.close();
+
+    return new Promise((resolve, reject) => {
+        canvas.toBlob(
+            (result) => {
+                if (result) {
+                    resolve(result);
+                } else {
+                    reject(
+                        new Error(
+                            "Could not convert image to PNG."
+                        )
+                    );
+                }
+            },
+            "image/png"
+        );
+    });
 }

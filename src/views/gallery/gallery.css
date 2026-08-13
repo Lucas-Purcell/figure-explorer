@@ -452,16 +452,6 @@ h1 {
     background: white;
 }
 
-.thumbnail span {
-    display: block;
-    min-width: 0;
-    overflow: hidden;
-    margin-top: 3px;
-    font-size: 10px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 /* ─────────────────────────────────────────────
    Preview
    ───────────────────────────────────────────── */
@@ -478,6 +468,16 @@ h1 {
     font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.preview-image-viewport {
+    position: relative;
+    width: 100%;
+    height: 300px;
+    min-width: 0;
+    overflow: hidden;
+    background: white;
+    user-select: none;
 }
 
 /* Tags */
@@ -512,13 +512,17 @@ h1 {
 .main-image {
     display: block;
     width: 100%;
-    max-width: 100%;
-    height: auto;
-    margin-top: 10px;
+    max-width: none;
+    height: 100%;
     object-fit: contain;
-    background: white;
-    opacity: 0;
-    transition: opacity 120ms ease-in-out;
+
+    transform-origin: center center;
+    will-change: transform;
+
+    user-select: none;
+    -webkit-user-drag: none;
+
+    cursor: zoom-in;
 }
 
 .main-image.loaded {
@@ -890,14 +894,8 @@ body.editor-mode .source {
    rather than forcing a fixed height. */
 
 body.editor-mode .preview-image-viewport {
-    position: relative;
-    width: 100%;
     height: calc(100vh - 170px);
     margin-top: 12px;
-    overflow: hidden;
-    background: var(--vscode-editor-background);
-    cursor: zoom-in;
-    user-select: none;
 }
 
 body.editor-mode .main-image {
@@ -975,4 +973,288 @@ body.editor-mode.comparison-mode .comparison-image {
 body.editor-mode.comparison-mode .comparison-image-loading {
     width: 100%;
     height: 300px;
+}
+
+.thumbnail-label {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    margin-top: 3px;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.thumbnail-actions {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: 4px;
+    opacity: 0;
+    transition: opacity 0.1s ease;
+}
+
+.thumbnail:hover .thumbnail-actions,
+.thumbnail:focus-within .thumbnail-actions {
+    opacity: 1;
+}
+
+.thumbnail-action {
+    flex: 1;
+    min-width: 0;
+    padding: 2px 4px;
+    border: 1px solid var(
+        --vscode-widget-border,
+        var(--vscode-panel-border)
+    );
+    border-radius: 2px;
+    color: var(--vscode-foreground);
+    background: var(--vscode-editor-background);
+    font: inherit;
+    font-size: 9px;
+    line-height: 14px;
+    cursor: pointer;
+}
+
+.thumbnail-action:hover {
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-background);
+    border-color: var(--vscode-button-background);
+}
+
+.preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+}
+
+.preview-header h2 {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.preview-actions {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: 0 0 auto;
+}
+
+.preview-action {
+    padding: 4px 7px;
+    border: 0;
+    border-radius: 3px;
+    color: var(--vscode-button-secondaryForeground);
+    background: var(--vscode-button-secondaryBackground);
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.preview-action:hover {
+    background: var(--vscode-button-secondaryHoverBackground);
+}
+
+body.editor-mode .preview-header {
+    gap: 12px;
+}
+
+body.editor-mode .preview-action {
+    padding: 5px 9px;
+}
+
+.comparison-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.comparison-card-header h3 {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.comparison-card-actions {
+    display: flex;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+.comparison-action {
+    padding: 3px 6px;
+    border: 0;
+    border-radius: 3px;
+    color: var(--vscode-button-secondaryForeground);
+    background: var(--vscode-button-secondaryBackground);
+    font: inherit;
+    font-size: 9px;
+    cursor: pointer;
+}
+
+.comparison-action:hover {
+    background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.figure-context-menu {
+    position: fixed;
+    z-index: 10000;
+
+    min-width: 150px;
+
+    padding: 4px;
+
+    background: var(--vscode-menu-background);
+    border: 1px solid var(--vscode-menu-border);
+    border-radius: 4px;
+
+    box-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.figure-context-menu button {
+    display: block;
+
+    width: 100%;
+
+    padding: 6px 10px;
+
+    border: none;
+    border-radius: 2px;
+
+    background: transparent;
+    color: var(--vscode-menu-foreground);
+
+    text-align: left;
+    font: inherit;
+
+    cursor: pointer;
+}
+
+.figure-context-menu button:hover {
+    background: var(--vscode-menu-selectionBackground);
+    color: var(--vscode-menu-selectionForeground);
+}
+
+.comparison-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.comparison-header-actions button {
+    padding: 4px 7px;
+    border: 0;
+    border-radius: 3px;
+    color: var(--vscode-button-secondaryForeground);
+    background: var(--vscode-button-secondaryBackground);
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.comparison-header-actions button:hover {
+    background: var(--vscode-button-secondaryHoverBackground);
+}
+
+#exit-comparison {
+    margin-left: 4px;
+}
+
+#thumbnails {
+    padding: 20px;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+}
+
+#thumbnails img {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+}
+
+.gallery-selection-rectangle {
+    pointer-events: none;
+}
+
+.gallery {
+    position: relative;
+}
+
+.gallery-selection-rectangle {
+    position: absolute;
+    pointer-events: none;
+    z-index: 9999;
+
+    border: 1px solid var(--vscode-focusBorder);
+    background: var(--vscode-editor-selectionBackground);
+}
+
+.comparison-card {
+    overflow: hidden;
+}
+
+.comparison-image-viewport {
+    position: relative;
+    width: 100%;
+    height: 400px;
+    overflow: hidden;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    touch-action: none;
+}
+
+.comparison-image {
+    display: block;
+
+    max-width: 100%;
+    max-height: 100%;
+
+    transform-origin: center center;
+
+    user-select: none;
+    -webkit-user-drag: none;
+
+    transition: transform 0.05s linear;
+}
+
+.comparison-image.zoomed {
+    cursor: grab;
+}
+
+.comparison-image-viewport.panning
+    .comparison-image {
+    cursor: grabbing;
+    transition: none;
+}
+
+.preview-image-viewport {
+    position: relative;
+    overflow: hidden;
+}
+
+.main-image {
+    transform-origin: center center;
+    will-change: transform;
+    cursor: zoom-in;
+}
+
+.main-image.zoomed {
+    cursor: grab;
+}
+
+.preview-image-viewport.panning {
+    cursor: grabbing;
+}
+
+.preview-image-viewport.panning .main-image {
+    cursor: grabbing;
 }

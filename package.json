@@ -2,7 +2,7 @@
   "name": "figure-explorer",
   "displayName": "Figure Explorer",
   "description": "Browse figures generated in Jupyter notebooks.",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "publisher": "LPurcell",
   "license": "MIT",
   "repository": {
@@ -46,15 +46,15 @@
       },
       {
         "command": "figure-explorer.revealFigureCell",
-        "title": "Figure Explorer: Reveal Cell"
+        "title": "Reveal Cell"
       },
       {
         "command": "figure-explorer.saveFigureAsPng",
-        "title": "Figure Explorer: Save PNG"
+        "title": "Save PNG"
       },
       {
         "command": "figure-explorer.exportFigureAsPdf",
-        "title": "Figure Explorer: Export PDF"
+        "title": "Export PDF"
       },
       {
         "command": "figure-explorer.openGalleryInEditor",

@@ -34,7 +34,10 @@ export function galleryShellHtml(editorMode = false): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+<meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; img-src data:; connect-src data:; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';"
+>
     <style nonce="${nonce}">
         ${css}
     </style>

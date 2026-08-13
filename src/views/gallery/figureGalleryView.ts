@@ -3,6 +3,12 @@ import { FigureRecord, NotebookFigures } from "../../notebook/types";
 import { figureRegistry } from "../../registry/figureRegistry";
 import { imageStore } from "../../registry/imageStore";
 import { galleryShellHtml } from "./galleryHtml";
+import {
+    saveFigureAsPng,
+    exportFigureAsPdf,
+    saveFiguresAsPng,
+    exportFiguresAsPdf
+} from "../../commands/figureActions";
 
 type SearchScope = "notebook" | "all";
 
@@ -11,7 +17,12 @@ type GalleryMessage =
     | { type: "setScope"; scope: SearchScope }
     | { type: "revealCell" }
     | { type: "requestThumbnail"; key: string }
-    | { type: "requestPreview"; key: string };
+    | { type: "requestPreview"; key: string }
+    | { type: "exportPdf"; key: string }
+    | { type: "savePNG"; key: string }
+    | { type: "copyImage"; key: string }
+    | { type: "exportAllPng"; keys: string[] }
+    | { type: "exportAllPdf"; keys: string[] };
 
 interface FigurePayload {
     key: string;
@@ -238,7 +249,7 @@ export class FigureGalleryViewProvider
         this.disposables.forEach((disposable) => disposable.dispose());
     }
 
-    private handleMessage(message: GalleryMessage): void {
+    private async handleMessage(message: GalleryMessage): Promise<void> {
 
         switch (message.type) {
 
@@ -270,6 +281,54 @@ export class FigureGalleryViewProvider
 
                 break;
             }
+            case "savePNG": {
+                const match = this.findFigureByKey(message.key);
+
+                if (match) {
+                    await saveFigureAsPng(match.figure);
+                }
+
+
+                break;
+            }
+
+            case "exportPdf": {
+                const match = this.findFigureByKey(message.key);
+
+                if (match) {
+                    await exportFigureAsPdf(match.figure);
+                }
+
+                break;
+            }
+            case "exportAllPng": {
+                const figures =
+                    message.keys
+                        .map((key) => this.findFigureByKey(key)?.figure)
+                        .filter(
+                            (figure): figure is FigureRecord =>
+                                figure !== undefined
+                        );
+
+                await saveFiguresAsPng(figures);
+
+                break;
+            }
+
+            case "exportAllPdf": {
+                const figures =
+                    message.keys
+                        .map((key) => this.findFigureByKey(key)?.figure)
+                        .filter(
+                            (figure): figure is FigureRecord =>
+                                figure !== undefined
+                        );
+
+                await exportFiguresAsPdf(figures);
+
+                break;
+            }
+
         }
     }
     private currentFigures: Array<{

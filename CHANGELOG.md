@@ -2,6 +2,12 @@
 
 All notable changes to the "figure-explorer" extension will be documented in this file.
 
+## [0.1.14] - 2026-08-18
+### Changed
+- Marked Figure Explorer as superseded by **Clio – Figure Explorer**.
+- Added a one-time migration notice with a direct link to Clio in the VS Code Marketplace.
+- Added a permanent migration notice to the README.
+
 ## [0.1.12] - 2026-08-12
 ### Improved
 - Fixed zooming of the preview image when in the sidebar.

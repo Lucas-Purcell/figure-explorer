@@ -12,6 +12,9 @@ import {
 import { FigureTreeItem } from "./views/figureTreeProvider";
 
 const refreshDelayMs = 150;
+const clioMarketplaceUrl =
+    "https://marketplace.visualstudio.com/items?itemName=LPurcell.clio-figure-explorer";
+const clioMigrationNoticeKey = "clioMigrationNoticeShown";
 
 function log(message: string, ...values: unknown[]): void {
     const suffix = values.length
@@ -52,6 +55,8 @@ export function activate(context: vscode.ExtensionContext): void {
         treeDataProvider: provider,
         showCollapseAll: true,
     });
+
+    void showClioMigrationNotice(context);
     const pendingRefreshes = new Map<string, ReturnType<typeof setTimeout>>();
 
     const isJupyterNotebook = (document: vscode.NotebookDocument): boolean =>
@@ -190,6 +195,10 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         ),
         vscode.commands.registerCommand(
+            "figure-explorer.openClio",
+            () => openClioMarketplace()
+        ),
+        vscode.commands.registerCommand(
             "figure-explorer.saveFigureAsPng",
             (item: FigureTreeItem) => {
                 void saveFigureAsPng(item.figure);
@@ -276,6 +285,30 @@ export function activate(context: vscode.ExtensionContext): void {
             },
         }
     );
+}
+
+async function showClioMigrationNotice(
+    context: vscode.ExtensionContext
+): Promise<void> {
+    if (context.globalState.get<boolean>(clioMigrationNoticeKey)) {
+        return;
+    }
+
+    const selection = await vscode.window.showInformationMessage(
+        "Figure Explorer has moved to Clio – Figure Explorer. Install Clio to receive future updates.",
+        "View Clio",
+        "Dismiss"
+    );
+
+    await context.globalState.update(clioMigrationNoticeKey, true);
+
+    if (selection === "View Clio") {
+        await openClioMarketplace();
+    }
+}
+
+function openClioMarketplace(): Thenable<boolean> {
+    return vscode.env.openExternal(vscode.Uri.parse(clioMarketplaceUrl));
 }
 
 async function revealNotebookCell(

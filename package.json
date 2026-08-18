@@ -2,7 +2,7 @@
   "name": "figure-explorer",
   "displayName": "Figure Explorer",
   "description": "Browse figures generated in Jupyter notebooks.",
-  "version": "0.1.12",
+  "version": "0.1.14",
   "publisher": "LPurcell",
   "license": "MIT",
   "repository": {
@@ -59,6 +59,10 @@
       {
         "command": "figure-explorer.openGalleryInEditor",
         "title": "Figure Explorer: Open Gallery in Editor"
+      },
+      {
+        "command": "figure-explorer.openClio",
+        "title": "Figure Explorer: Get Clio"
       }
     ],
     "menus": {

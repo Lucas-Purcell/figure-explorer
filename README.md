@@ -1,5 +1,9 @@
 # Figure Explorer
 
+> **This extension has moved to [Clio – Figure Explorer](https://marketplace.visualstudio.com/items?itemName=LPurcell.clio-figure-explorer).**
+>
+> Figure Explorer is retained for existing users, but it will not receive future feature updates. Install Clio for the maintained VS Code extension and the companion JupyterLab extension.
+
 Figure Explorer is a VS Code extension for browsing, searching, organizing, comparing, and navigating figures generated in Jupyter notebooks.
 
 When working with notebooks containing many plots, it can be difficult to keep track of which cell produced which figure. Figure Explorer collects figures from your open notebooks and provides a dedicated gallery for quickly browsing them, searching their contents, organizing them with tags, comparing figures, and jumping back to their source cells.
